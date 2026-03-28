@@ -3,9 +3,8 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_REGISTRY  = 'santonix'
-        VERSION          = "1.0.${BUILD_NUMBER}"
-        COMPOSE_FILE     = '/home/bonny/CLAUDE/Aplications/ecommerce-platform/docker-compose.yaml'
+        DOCKER_REGISTRY = 'santonix'
+        VERSION         = "1.0.${BUILD_NUMBER}"
     }
 
     options {
@@ -175,13 +174,18 @@ pipeline {
                     sh '''
                         echo "🚀 Deploying ecommerce platform..."
 
-                        # Use docker-compose with explicit file path
-                        # No cd needed — works from any directory inside Jenkins
+                        # Copy compose file from Jenkins workspace to /tmp (host accessible)
+                        COMPOSE_TMP=$(mktemp /tmp/docker-compose-XXXXXX.yaml)
+                        cp $WORKSPACE/Aplications/ecommerce-platform/docker-compose.yaml $COMPOSE_TMP
+
+                        echo "📄 Using compose file: $COMPOSE_TMP"
+
                         JWT_SECRET=$JWT_SECRET \
                         DB_ROOT_PASS=$DB_ROOT_PASS \
-                        docker-compose \
-                            -f /home/bonny/CLAUDE/Aplications/ecommerce-platform/docker-compose.yaml \
-                            up -d --remove-orphans
+                        docker-compose -f $COMPOSE_TMP up -d --remove-orphans
+
+                        # Cleanup
+                        rm -f $COMPOSE_TMP
 
                         echo "✅ Deployment complete!"
                     '''
