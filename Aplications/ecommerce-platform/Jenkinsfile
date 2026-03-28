@@ -5,8 +5,6 @@ pipeline {
     environment {
         DOCKER_REGISTRY = 'santonix'
         VERSION         = "1.0.${BUILD_NUMBER}"
-        // Map Jenkins container workspace to host path
-        HOST_WORKSPACE  = "/home/bonny/CLAUDE"
     }
 
     options {
@@ -75,7 +73,7 @@ pipeline {
                                 -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/api-gateway:/app \
                                 -w /app \
                                 node:18-alpine \
-                                sh -c "npm ci && npm test -- --passWithNoTests"
+                                sh -c "npm ci && npm test -- --passWithNoTests --forceExit"
                             echo "✅ API Gateway tests passed!"
                         '''
                     }
@@ -104,6 +102,7 @@ pipeline {
                             docker run --rm \
                                 -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/product-service:/app \
                                 -w /app \
+                                -e PYTHONPATH=/app \
                                 python:3.11-slim \
                                 sh -c "pip install -r requirements.txt pytest -q && pytest tests/ -v --tb=short || true"
                             echo "✅ Product Service tests passed!"
