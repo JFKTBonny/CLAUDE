@@ -5,8 +5,6 @@ pipeline {
     environment {
         DOCKER_REGISTRY = 'santonix'
         VERSION         = "1.0.${BUILD_NUMBER}"
-        SERVICES_PATH   = 'Aplications/ecommerce-platform/services'
-        HOST_PROJECT    = '/home/bonny/CLAUDE/Aplications/ecommerce-platform'
     }
 
     options {
@@ -127,28 +125,40 @@ pipeline {
                 stage('Gateway') {
                     when { expression { env.BUILD_GATEWAY == 'true' } }
                     steps {
-                        script { buildAndPush('api-gateway') }
+                        script {
+                            buildAndPush('api-gateway',
+                                "${WORKSPACE}/Aplications/ecommerce-platform/services/api-gateway")
+                        }
                     }
                 }
 
                 stage('User') {
                     when { expression { env.BUILD_USER == 'true' } }
                     steps {
-                        script { buildAndPush('user-service') }
+                        script {
+                            buildAndPush('user-service',
+                                "${WORKSPACE}/Aplications/ecommerce-platform/services/user-service")
+                        }
                     }
                 }
 
                 stage('Product') {
                     when { expression { env.BUILD_PRODUCT == 'true' } }
                     steps {
-                        script { buildAndPush('product-service') }
+                        script {
+                            buildAndPush('product-service',
+                                "${WORKSPACE}/Aplications/ecommerce-platform/services/product-service")
+                        }
                     }
                 }
 
                 stage('Order') {
                     when { expression { env.BUILD_ORDER == 'true' } }
                     steps {
-                        script { buildAndPush('order-service') }
+                        script {
+                            buildAndPush('order-service',
+                                "${WORKSPACE}/Aplications/ecommerce-platform/services/order-service")
+                        }
                     }
                 }
 
@@ -164,7 +174,7 @@ pipeline {
     }
 }
 
-def buildAndPush(String service) {
+def buildAndPush(String service, String contextPath) {
     withCredentials([usernamePassword(
         credentialsId: 'dockerhub-creds',
         usernameVariable: 'DOCKER_USER',
@@ -173,19 +183,21 @@ def buildAndPush(String service) {
         sh """
             echo "🔨 Building ${service} v${VERSION}..."
 
-            # Copy service files to a temp dir accessible by host Docker daemon
+            # Copy from Jenkins workspace to /tmp on host (shared between Jenkins container and Docker daemon)
             TMPDIR=\$(mktemp -d /tmp/jenkins-build-XXXXXX)
-            cp -r ${HOST_PROJECT}/services/${service}/. \$TMPDIR/
+            cp -r ${contextPath}/. \$TMPDIR/
+
+            echo "📦 Build context: \$TMPDIR"
+            ls \$TMPDIR/
 
             docker build \
                 -t ${DOCKER_REGISTRY}/${service}:${VERSION} \
                 -t ${DOCKER_REGISTRY}/${service}:latest \
                 \$TMPDIR/
 
-            # Cleanup temp dir
             rm -rf \$TMPDIR
 
-            echo "📤 Pushing ${service} to Docker Hub..."
+            echo "📤 Pushing ${service}..."
             echo "\$DOCKER_PASS" | docker login -u "\$DOCKER_USER" --password-stdin
             docker push ${DOCKER_REGISTRY}/${service}:${VERSION}
             docker push ${DOCKER_REGISTRY}/${service}:latest
