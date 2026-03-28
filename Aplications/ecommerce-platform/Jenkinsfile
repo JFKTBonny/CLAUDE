@@ -3,10 +3,10 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_REGISTRY  = 'santonix'
-        VERSION          = "1.0.${BUILD_NUMBER}"
-        // Actual host path where project lives
-        PROJECT_PATH     = '/home/bonny/CLAUDE/Aplications/ecommerce-platform'
+        DOCKER_REGISTRY = 'santonix'
+        VERSION         = "1.0.${BUILD_NUMBER}"
+        SERVICES_PATH   = 'Aplications/ecommerce-platform/services'
+        HOST_PROJECT    = '/home/bonny/CLAUDE/Aplications/ecommerce-platform'
     }
 
     options {
@@ -173,12 +173,17 @@ def buildAndPush(String service) {
         sh """
             echo "🔨 Building ${service} v${VERSION}..."
 
-            # Build using tar pipe — sends files from Jenkins container to Docker daemon
-            tar -C /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/${service} -czf - . \
-                | docker build \
-                    -t ${DOCKER_REGISTRY}/${service}:${VERSION} \
-                    -t ${DOCKER_REGISTRY}/${service}:latest \
-                    -
+            # Copy service files to a temp dir accessible by host Docker daemon
+            TMPDIR=\$(mktemp -d /tmp/jenkins-build-XXXXXX)
+            cp -r ${HOST_PROJECT}/services/${service}/. \$TMPDIR/
+
+            docker build \
+                -t ${DOCKER_REGISTRY}/${service}:${VERSION} \
+                -t ${DOCKER_REGISTRY}/${service}:latest \
+                \$TMPDIR/
+
+            # Cleanup temp dir
+            rm -rf \$TMPDIR
 
             echo "📤 Pushing ${service} to Docker Hub..."
             echo "\$DOCKER_PASS" | docker login -u "\$DOCKER_USER" --password-stdin
