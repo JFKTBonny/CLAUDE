@@ -128,11 +128,79 @@ pipeline {
             }
         }
 
+        stage('Build & Push Images') {
+            parallel {
+
+                stage('Gateway') {
+                    when { expression { env.BUILD_GATEWAY == 'true' } }
+                    steps {
+                        script {
+                            buildAndPush('api-gateway',
+                                '/home/bonny/CLAUDE/Aplications/ecommerce-platform/services/api-gateway')
+                        }
+                    }
+                }
+
+                stage('User') {
+                    when { expression { env.BUILD_USER == 'true' } }
+                    steps {
+                        script {
+                            buildAndPush('user-service',
+                                '/home/bonny/CLAUDE/Aplications/ecommerce-platform/services/user-service')
+                        }
+                    }
+                }
+
+                stage('Product') {
+                    when { expression { env.BUILD_PRODUCT == 'true' } }
+                    steps {
+                        script {
+                            buildAndPush('product-service',
+                                '/home/bonny/CLAUDE/Aplications/ecommerce-platform/services/product-service')
+                        }
+                    }
+                }
+
+                stage('Order') {
+                    when { expression { env.BUILD_ORDER == 'true' } }
+                    steps {
+                        script {
+                            buildAndPush('order-service',
+                                '/home/bonny/CLAUDE/Aplications/ecommerce-platform/services/order-service')
+                        }
+                    }
+                }
+
+            }
+        }
+
     }
 
     post {
-        success { echo "✅ Stage 3 passed — all tests green!" }
-        failure { echo "❌ Stage 3 failed — check test output above" }
+        success { echo "✅ Stage 4 passed — images built and pushed!" }
+        failure { echo "❌ Stage 4 failed — check build output above" }
         always  { cleanWs() }
+    }
+}
+
+def buildAndPush(String service, String context) {
+    withCredentials([usernamePassword(
+        credentialsId: 'dockerhub-creds',
+        usernameVariable: 'DOCKER_USER',
+        passwordVariable: 'DOCKER_PASS'
+    )]) {
+        sh """
+            echo "🔨 Building ${service} v${VERSION}..."
+            docker build \
+                -t ${DOCKER_REGISTRY}/${service}:${VERSION} \
+                -t ${DOCKER_REGISTRY}/${service}:latest \
+                ${context}/
+
+            echo "📤 Pushing ${service}..."
+            echo "\$DOCKER_PASS" | docker login -u "\$DOCKER_USER" --password-stdin
+            docker push ${DOCKER_REGISTRY}/${service}:${VERSION}
+            docker push ${DOCKER_REGISTRY}/${service}:latest
+            echo "✅ ${service} pushed to Docker Hub!"
+        """
     }
 }
