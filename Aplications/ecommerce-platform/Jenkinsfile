@@ -3,12 +3,14 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_REGISTRY = 'santonix'
-        VERSION         = "1.0.${BUILD_NUMBER}"
+        DOCKER_REGISTRY  = 'santonix'
+        VERSION          = "1.0.${BUILD_NUMBER}"
+        // Actual host path where project lives
+        PROJECT_PATH     = '/home/bonny/CLAUDE/Aplications/ecommerce-platform'
     }
 
     options {
-        timeout(time: 30, unit: 'MINUTES')
+        timeout(time: 60, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '10'))
         timestamps()
     }
@@ -68,11 +70,9 @@ pipeline {
                     when { expression { env.BUILD_GATEWAY == 'true' } }
                     steps {
                         sh '''
-                            echo "🧪 Testing API Gateway..."
                             docker run --rm \
                                 -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/api-gateway:/app \
-                                -w /app \
-                                node:18-alpine \
+                                -w /app node:18-alpine \
                                 sh -c "npm ci && npm test -- --passWithNoTests --forceExit"
                             echo "✅ API Gateway tests passed!"
                         '''
@@ -83,11 +83,9 @@ pipeline {
                     when { expression { env.BUILD_USER == 'true' } }
                     steps {
                         sh '''
-                            echo "🧪 Testing User Service..."
                             docker run --rm \
                                 -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/user-service:/app \
-                                -w /app \
-                                maven:3.9-eclipse-temurin-17 \
+                                -w /app maven:3.9-eclipse-temurin-17 \
                                 mvn test -q -Dsurefire.failIfNoSpecifiedTests=false || true
                             echo "✅ User Service tests passed!"
                         '''
@@ -98,12 +96,9 @@ pipeline {
                     when { expression { env.BUILD_PRODUCT == 'true' } }
                     steps {
                         sh '''
-                            echo "🧪 Testing Product Service..."
                             docker run --rm \
                                 -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/product-service:/app \
-                                -w /app \
-                                -e PYTHONPATH=/app \
-                                python:3.11-slim \
+                                -w /app -e PYTHONPATH=/app python:3.11-slim \
                                 sh -c "pip install -r requirements.txt pytest -q && pytest tests/ -v --tb=short || true"
                             echo "✅ Product Service tests passed!"
                         '''
@@ -114,11 +109,9 @@ pipeline {
                     when { expression { env.BUILD_ORDER == 'true' } }
                     steps {
                         sh '''
-                            echo "🧪 Testing Order Service..."
                             docker run --rm \
                                 -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/order-service:/app \
-                                -w /app \
-                                golang:1.21-alpine \
+                                -w /app golang:1.21-alpine \
                                 sh -c "go mod download && go test ./... -v"
                             echo "✅ Order Service tests passed!"
                         '''
@@ -134,40 +127,28 @@ pipeline {
                 stage('Gateway') {
                     when { expression { env.BUILD_GATEWAY == 'true' } }
                     steps {
-                        script {
-                            buildAndPush('api-gateway',
-                                '/home/bonny/CLAUDE/Aplications/ecommerce-platform/services/api-gateway')
-                        }
+                        script { buildAndPush('api-gateway') }
                     }
                 }
 
                 stage('User') {
                     when { expression { env.BUILD_USER == 'true' } }
                     steps {
-                        script {
-                            buildAndPush('user-service',
-                                '/home/bonny/CLAUDE/Aplications/ecommerce-platform/services/user-service')
-                        }
+                        script { buildAndPush('user-service') }
                     }
                 }
 
                 stage('Product') {
                     when { expression { env.BUILD_PRODUCT == 'true' } }
                     steps {
-                        script {
-                            buildAndPush('product-service',
-                                '/home/bonny/CLAUDE/Aplications/ecommerce-platform/services/product-service')
-                        }
+                        script { buildAndPush('product-service') }
                     }
                 }
 
                 stage('Order') {
                     when { expression { env.BUILD_ORDER == 'true' } }
                     steps {
-                        script {
-                            buildAndPush('order-service',
-                                '/home/bonny/CLAUDE/Aplications/ecommerce-platform/services/order-service')
-                        }
+                        script { buildAndPush('order-service') }
                     }
                 }
 
@@ -177,13 +158,13 @@ pipeline {
     }
 
     post {
-        success { echo "✅ Stage 4 passed — images built and pushed!" }
+        success { echo "✅ Stage 4 passed — all images pushed to Docker Hub!" }
         failure { echo "❌ Stage 4 failed — check build output above" }
         always  { cleanWs() }
     }
 }
 
-def buildAndPush(String service, String context) {
+def buildAndPush(String service) {
     withCredentials([usernamePassword(
         credentialsId: 'dockerhub-creds',
         usernameVariable: 'DOCKER_USER',
@@ -191,16 +172,19 @@ def buildAndPush(String service, String context) {
     )]) {
         sh """
             echo "🔨 Building ${service} v${VERSION}..."
-            docker build \
-                -t ${DOCKER_REGISTRY}/${service}:${VERSION} \
-                -t ${DOCKER_REGISTRY}/${service}:latest \
-                ${context}/
 
-            echo "📤 Pushing ${service}..."
+            # Build using tar pipe — sends files from Jenkins container to Docker daemon
+            tar -C /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/${service} -czf - . \
+                | docker build \
+                    -t ${DOCKER_REGISTRY}/${service}:${VERSION} \
+                    -t ${DOCKER_REGISTRY}/${service}:latest \
+                    -
+
+            echo "📤 Pushing ${service} to Docker Hub..."
             echo "\$DOCKER_PASS" | docker login -u "\$DOCKER_USER" --password-stdin
             docker push ${DOCKER_REGISTRY}/${service}:${VERSION}
             docker push ${DOCKER_REGISTRY}/${service}:latest
-            echo "✅ ${service} pushed to Docker Hub!"
+            echo "✅ ${service} pushed!"
         """
     }
 }
