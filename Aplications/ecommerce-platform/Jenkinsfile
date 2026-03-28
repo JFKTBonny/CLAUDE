@@ -3,7 +3,7 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_REGISTRY  = 'your-dockerhub-username'   // ← replace this
+        DOCKER_REGISTRY  = 'santonix'   
         VERSION          = "1.0.${BUILD_NUMBER}"
         COMPOSE_FILE     = 'docker-compose.yaml'
     }

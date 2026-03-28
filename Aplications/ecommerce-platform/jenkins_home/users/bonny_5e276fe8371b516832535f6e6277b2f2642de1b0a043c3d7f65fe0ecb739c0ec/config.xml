@@ -53,5 +53,17 @@
         <tokenList/>
       </tokenStore>
     </jenkins.security.ApiTokenProperty>
+    <hudson.plugins.favorite.user.FavoriteUserProperty plugin="favorite@2.263.v941d21defef7">
+      <data class="concurrent-hash-map"/>
+    </hudson.plugins.favorite.user.FavoriteUserProperty>
+    <jenkins.plugins.slack.user.SlackUserProperty plugin="slack@795.v4b_9705b_e6d47">
+      <disableNotifications>false</disableNotifications>
+    </jenkins.plugins.slack.user.SlackUserProperty>
+    <jenkins.security.LastGrantedAuthoritiesProperty>
+      <roles>
+        <string>authenticated</string>
+      </roles>
+      <timestamp>1774701211088</timestamp>
+    </jenkins.security.LastGrantedAuthoritiesProperty>
   </properties>
 </user>

@@ -1,0 +1,46 @@
+# fix permissions--- jenkins runs as uid 1000 inside container.....
+        mkdir jenkins_home
+        sudo chown -R 1000:1000 ~/CLAUDE/Aplications/ecommerce-platform/jenkins_home  
+
+# Create a jenkins docker container:
+
+        docker run -d \
+        --name jenkins \
+        --network ecomerce-platform_ecommerce \
+        -p 8080:8080 \
+        -p 50000:50000 \
+        -v ~/CLAUDE/Aplications/ecommerce-platform/jenkins_home:/var/jenkins_home \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        --restart unless-stopped \
+        jenkins/jenkins:lts
+
+# Make sure Jenkins can talk to Docker daemon: 
+
+        docker exec jenkins docker ps 2>/dev/null || echo "Docker not accessible from Jenkins"
+
+# If not accessible, fix permissions:
+
+        sudo chmod 666 /var/run/docker.sock
+
+# The Docker socket is accessible but the Docker CLI binary is not installed inside the Jenkins container. We need to install it:
+
+# Install Docker CLI inside Jenkins container:
+        docker exec -u root jenkins bash -c "
+        apt-get update -q &&
+        apt-get install -y docker.io &&
+        usermod -aG docker jenkins
+        "
+
+# Restart Jenkins container to apply group changes:
+        docker restart jenkins
+
+# Wait for Jenkins to start
+        sleep 30
+
+# Verify Docker CLI now works inside Jenkins
+        docker exec jenkins docker ps
+
+
+Expected output — you should see your running containers listed from inside Jenkins:  CONTAINER ID   IMAGE     COMMAND 
+
+       
