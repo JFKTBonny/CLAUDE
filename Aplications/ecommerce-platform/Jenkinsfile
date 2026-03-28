@@ -23,10 +23,49 @@ pipeline {
             }
         }
 
+        stage('Detect Changes') {
+            steps {
+                script {
+                    def changed = sh(
+                        script: "git diff --name-only HEAD~1 HEAD 2>/dev/null || echo 'all'",
+                        returnStdout: true
+                    ).trim()
+
+                    // Build all if manually triggered or can't detect changes
+                    def buildAll = (
+                        changed == 'all'  ||
+                        changed.isEmpty() ||
+                        currentBuild.getBuildCauses()
+                                    .toString()
+                                    .contains('UserIdCause')
+                    )
+
+                    env.BUILD_GATEWAY = (buildAll || changed.contains('api-gateway'))     ? 'true' : 'false'
+                    env.BUILD_USER    = (buildAll || changed.contains('user-service'))    ? 'true' : 'false'
+                    env.BUILD_PRODUCT = (buildAll || changed.contains('product-service')) ? 'true' : 'false'
+                    env.BUILD_ORDER   = (buildAll || changed.contains('order-service'))   ? 'true' : 'false'
+
+                    echo """
+                    ========================================
+                    📦 Build #${BUILD_NUMBER} — Services:
+                       api-gateway:     ${env.BUILD_GATEWAY}
+                       user-service:    ${env.BUILD_USER}
+                       product-service: ${env.BUILD_PRODUCT}
+                       order-service:   ${env.BUILD_ORDER}
+                    ----------------------------------------
+                       Changed files:  ${changed}
+                       Full build:     ${buildAll}
+                       Trigger:        ${currentBuild.getBuildCauses()[0].shortDescription}
+                    ========================================
+                    """
+                }
+            }
+        }
+
     }
 
     post {
-        success { echo "✅ Stage 1 passed!" }
-        failure { echo "❌ Stage 1 failed!" }
+        success { echo "✅ Stage 2 passed!" }
+        failure { echo "❌ Stage 2 failed!" }
     }
 }
