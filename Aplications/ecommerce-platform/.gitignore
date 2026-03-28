@@ -34,3 +34,6 @@ Aplications/ecommerce-platform/jenkins_home
 
 Git/my-blog/node_modules
 website-templates/
+
+# Jenkins runtime data
+jenkins_home/
