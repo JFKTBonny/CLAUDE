@@ -1,0 +1,6 @@
+---
+nginx_port: 80
+nginx_user: www-data
+nginx_worker_processes: auto
+nginx_server_name: localhost
+nginx_root: /var/www/html

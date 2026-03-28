@@ -1,0 +1,60 @@
+# values.yaml
+replicaCount: 1
+image:
+ repository: nginx
+ pullPolicy: IfNotPresent
+ tag: "1.25.0" # Always pin versions — never use 'latest'
+
+service:
+ type: ClusterIP
+ port: 80
+
+ingress:
+  enabled: true
+  host: mywebapp.local
+  path: /
+  className: nginx
+  annotations: {}
+  tls: false
+  tlsSecret: ""
+
+
+resources:
+ limits:
+  cpu: 200m
+  memory: 128Mi
+ requests:
+  cpu: 100m
+  memory: 64Mi
+
+
+# values.yaml
+env:
+ - name: APP_ENV
+   value: production
+ - name: LOG_LEVEL
+   value: info
+ - name: PORT
+   value: "8080"
+
+
+serviceAccount:
+  create: true
+
+
+postgresql:
+  enabled: true
+  auth:
+    username: myapp
+    password: secretpass # Use a secret manager in production!
+    database: myappdb
+  primary:
+    persistence:
+      enabled: true
+      size: 8Gi
+
+redis:
+  enabled: false # Disabled — won't be deployed
+  auth:
+    enabled: true
+    password: redispass      

@@ -1,0 +1,59 @@
+###########################
+####### HELM  #############
+###########################
+  Helm is the package manager for kubernetes...
+  It lets you define, install,  and upgrade complex k8s apps using reusable packages called Charts...
+
+Core concepts
+*************
+    - Chart : is the Helm package...It contains all kubernetes resource definitions needed to run an app... 
+                        *** Chart structure:
+                            ***************
+                    mychart/
+                    ├── Chart.yaml        # Chart metadata (name, version, description)
+                    ├── values.yaml       # Default configuration values
+                    ├── templates/        # Kubernetes manifest templates
+                    │   ├── deployment.yaml
+                    │   ├── service.yaml
+                    │   └── _helpers.tpl  # Reusable template helpers
+                    └── charts/           # Sub-charts (dependencies)    
+
+    - Release: is a running instance of a chart in a  cluster...
+               The same chart can be installed multiple time,each as a different release...
+
+    - Repository: is a place where charts are collected and shared(e.g Artifact Hub, Bitnami)...
+
+    - Values: are Configurations inputs that  customize a chart...It can be ovverride at install time...  
+
+
+Essential CLI  Commands:
+#######################
+Command                               Purpose
+*******                               *******
+helm repo add <name> <url>           Add a chart repository
+helm repo update                     Refresh repository index
+helm search repo <keyword>           Search for charts
+helm install <release> <chart>       Install a chart
+helm upgrade <release> <chart>       Upgrade a release
+helm rollback <release> <revision>   Roll back to a previous revision
+helm uninstall <release>             Remove a release
+helm list                            List all releases
+helm status <release>                Show release status
+helm get values <release>            Show release's current values
+helm template <release> <chart>      Render templates locally (dry run)
+helm lint <chart>                    Validate a chart
+helm package <chart>                 Package chart into a .tgz      
+
+Values & Overrides:
+##################
+        . values.yaml (defaults in the chart)
+        . Parent chart's values.yaml (if sub-chart)
+        . -f custom-values.yaml (user-supplied file)
+        . --set key=value (inline override — highest priority)
+
+        example:
+        *******  helm install myapp ./mychart \
+                    -f prod-values.yaml \
+                    --set image.tag=v2.1.0
+
+                    

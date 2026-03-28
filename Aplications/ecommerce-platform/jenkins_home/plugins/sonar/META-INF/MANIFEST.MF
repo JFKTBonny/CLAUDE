@@ -1,0 +1,34 @@
+Manifest-Version: 1.0
+Created-By: Maven Archiver 3.6.0
+Build-Jdk-Spec: 17
+Specification-Title: SonarQube Scanner for Jenkins
+Specification-Version: 2.18
+Specification-Vendor: SonarSource
+Implementation-Title: SonarQube Scanner for Jenkins
+Implementation-Version: 2.18.2
+Implementation-Vendor: SonarSource
+Plugin-Class: hudson.plugins.sonar.SonarPlugin
+Group-Id: org.jenkins-ci.plugins
+Artifact-Id: sonar
+Short-Name: sonar
+Long-Name: SonarQube Scanner for Jenkins
+Url: https://github.com/jenkinsci/sonarqube-plugin
+Plugin-Version: 2.18.2
+Hudson-Version: 2.479.3
+Jenkins-Version: 2.479.3
+Plugin-Dependencies: caffeine-api:3.1.8-133.v17b_1ff2e0599,commons-lang3
+ -api:3.17.0-84.vb_b_938040b_078,okhttp-api:4.11.0-183.va_87fc7a_89810,m
+ aven-plugin:3.24;resolution:=optional,workflow-support:944.v5a_859593b_
+ 98a_;resolution:=optional,configurationslicing:548.ve92d48e66b_f8;resol
+ ution:=optional,credentials:1405.vb_cda_74a_f8974,plain-credentials:183
+ .va_de8f1dd5a_2b_,script-security:1369.v9b_98a_4e95b_2d;resolution:=opt
+ ional
+Plugin-Developers: 
+Plugin-License-Name: GNU Lesser General Public License (LGPL), v.3
+Plugin-License-Url: https://www.gnu.org/licenses/lgpl.txt
+Plugin-ScmConnection: scm:git:https://github.com/jenkinsci/sonarqube-plu
+ gin.git
+Plugin-ScmTag: sonar-2.18.2
+Plugin-ScmUrl: https://github.com/jenkinsci/sonarqube-plugin
+Implementation-Build: a0f503280f16e1578274c308b8e6848ea68ee6f9
+

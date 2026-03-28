@@ -1,0 +1,17 @@
+HOOKS:
+#####
+  Hooks let you run actions at specific points in a release lifecycle...
+
+Hook                            When it runs
+####                            ############
+pre-install                        Before resources are created
+post-install                       After all resources are ready
+pre-upgrade / post-upgrade         Around upgrades
+pre-rollback / post-rollback       Around rollbacks
+pre-delete / post-delete           Around uninstall  
+
+Example:
+*******  annotations:
+            "helm.sh/hook": pre-install
+            "helm.sh/hook-weight": "0"
+            "helm.sh/hook-delete-policy": hook-succeeded

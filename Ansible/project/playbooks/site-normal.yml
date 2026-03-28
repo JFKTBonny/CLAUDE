@@ -1,0 +1,82 @@
+---
+- name: installing packages
+  hosts: webservers
+  become: true
+
+  tasks:
+    - name: Install required packages
+      ansible.builtin.apt:
+        name:
+          - nginx
+          - curl
+          - git
+          - ufw
+        state: present
+        update_cache: yes
+
+    # - name: Enable UFW
+    #   ansible.builtin.command: ufw --force enable
+    #   become: true
+
+    # - name: Allow SSH
+    #   community.general.ufw:
+    #     rule: allow
+    #     port: "22"
+    #   become: true
+
+    # - name: Allow HTTP on web servers
+    #   community.general.ufw:
+    #     rule: allow
+    #     port: "80"
+    #   when: "'webservers' in group_names"
+    #   become: true
+
+    # - name: Enable UFW
+    #   community.general.ufw:
+    #     state: enabled
+    #     policy: deny
+    #   become: true      
+
+    - name: Create application users 
+      ansible.builtin.user:
+        name: "{{ item.name }}"
+        groups: "{{ item.groups }}"
+        state: present
+      loop:
+        - { name: deploy, groups: 'www-data' }
+        - { name: monitor, groups: 'adm' }
+
+    - name: Copy static website files
+      ansible.builtin.copy:
+        src: static/
+        dest: /var/www/html/
+        owner: www-data
+        group: www-data
+        mode: '0755'
+
+    - name: Copy Nginx main config
+      ansible.builtin.copy:
+        src: files/nginx.conf
+        dest: /etc/nginx/nginx.conf
+        owner: root
+        mode: '0644'
+      notify: Reload Nginx
+
+    - name: Copy vhost config
+      ansible.builtin.copy:
+        src: files/vhost.conf
+        dest: /etc/nginx/sites-enabled/default
+        owner: root
+        mode: '0644'
+      notify: Reload Nginx
+
+    - name: Start nginx (no systemd in containers)
+      ansible.builtin.command: nginx
+      become: true
+      args:
+        creates: /run/nginx.pid
+
+  handlers:
+    - name: Reload Nginx
+      ansible.builtin.command: nginx -s reload
+      become: true

@@ -1,0 +1,4 @@
+# inventory/group_vars/all.yml
+ansible_user: root
+ansible_password: root
+ansible_ssh_common_args: '-o StrictHostKeyChecking=no'

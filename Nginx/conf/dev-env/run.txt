@@ -1,0 +1,6 @@
+docker run -itd \
+  -p 8080:80 \
+  -v $PWD/site:/var/www/html \
+  -v $PWD/conf.d:/etc/nginx/conf.d \
+  --name dev-nginx \
+  nginx

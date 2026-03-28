@@ -1,0 +1,25 @@
+Templating Basics:
+*****************
+         Helm uses Go's templating engine...
+         Key syntax:
+         **********
+         
+# Reference a value
+image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+
+# Conditionals
+{{- if .Values.ingress.enabled }}
+# ... ingress resource
+{{- end }}
+
+# Loops
+{{- range .Values.env }}
+- name: {{ .name }}
+  value: {{ .value }}
+{{- end }}
+
+# Built-in objects
+{{ .Release.Name }}       # Release name
+{{ .Release.Namespace }}  # Namespace
+{{ .Chart.Name }}         # Chart name
+{{ .Chart.Version }}      # Chart version 

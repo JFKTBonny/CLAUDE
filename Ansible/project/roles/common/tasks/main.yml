@@ -1,0 +1,29 @@
+---
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install baseline packages
+  ansible.builtin.apt:
+    name: '{{ item }}'
+    state: present
+  loop: '{{ common_packages }}'
+
+- name: Install timezone data
+  ansible.builtin.apt:
+    name: tzdata
+    state: present
+
+- name: Create deploy user
+  ansible.builtin.user:
+    name: '{{ deploy_user }}'
+    groups: sudo
+    shell: /bin/bash
+    state: present
+
+- name: Set timezone
+  community.general.timezone:
+    name: '{{ system_timezone }}'
+  notify: Restart cron
+

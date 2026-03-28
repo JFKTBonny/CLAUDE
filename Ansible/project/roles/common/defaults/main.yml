@@ -1,0 +1,9 @@
+---
+  common_packages:
+    - curl
+    - vim
+    - git
+    - ufw
+    - fail2ban
+  deploy_user: deploy
+  system_timezone: Etc/UTC

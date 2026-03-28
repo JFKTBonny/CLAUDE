@@ -1,0 +1,142 @@
+APPROACH 1 — sites-available/ (Debian/Ubuntu convention)
+********************************************************
+/etc/nginx/
+│
+├── sites-available/    ← Store ALL configs here
+│     ├── sockshop.conf    (disabled)
+│     ├── myapp.conf       (disabled)
+│     └── default          (disabled)
+│
+└── sites-enabled/      ← Symlink ACTIVE configs here
+      └── myapp.conf → ../sites-available/myapp.conf
+
+
+APPROACH 2 — conf.d/ (Universal, works everywhere)
+**************************************************
+/etc/nginx/
+│
+└── conf.d/             ← Drop configs directly here
+      ├── sockshop.conf    (active immediately)
+      └── myapp.conf       (active immediately)
+
+################################################################################
+#######################
+# nginx.conf loads both:
+#######################
+
+# /etc/nginx/nginx.conf
+***********************
+
+http {
+    # Loads everything in conf.d/
+    include /etc/nginx/conf.d/*.conf;
+
+    # Loads only symlinked sites
+    include /etc/nginx/sites-enabled/*;
+}
+
+
+Both directories are included by nginx 
+files in either location are loaded
+
+################################################################################
+
+### Key Difference — Enable/Disable Mechanism
+
+sites-available/ workflow:
+*************************
+# Enable a site
+ln -s /etc/nginx/sites-available/myapp.conf \
+      /etc/nginx/sites-enabled/myapp.conf ✅
+
+# Disable a site (without deleting config)
+rm /etc/nginx/sites-enabled/myapp.conf ✅
+Config still safe in sites-available/ ✅
+
+
+conf.d/ workflow:
+****************
+# Enable a site — just create the file
+vim /etc/nginx/conf.d/myapp.conf ✅
+
+# Disable a site — rename to remove from glob
+mv /etc/nginx/conf.d/myapp.conf \
+   /etc/nginx/conf.d/myapp.conf.disabled ✅
+
+################################################################################
+
+scenarion config of conf.d:
+**************************
+
+# /etc/nginx/conf.d/demo.conf
+
+server {
+    listen 80;
+    server_name yourdomain.com;
+
+    # Webroot
+    root /var/www/demo;
+    index index.html;
+
+    # Serve static files — read only
+    location / {
+        try_files $uri $uri/ =404;
+        autoindex off;
+    }
+
+    # Serve uploaded files safely
+    location /uploads/ {
+        alias /var/www/demo/uploads/;
+
+        # Critical security rules for uploads
+        location ~* \.(php|sh|py|rb|pl)$ {
+            deny all;        ← Block executable files ✅
+        }
+    }
+
+    # Block hidden files
+    location ~ /\. {
+        deny all;            ← Block .htaccess etc ✅
+    }
+}
+
+
+### When to Use Which
+*********************
+        USE conf.d/ WHEN:               USE sites-available/ WHEN:
+        ────────────────────            ─────────────────────────────
+        ✅ Docker containers            ✅ Multiple sites on one server
+        ✅ Single app servers           ✅ Need enable/disable flexibility
+        ✅ Simple setups                ✅ Staging vs production configs
+        ✅ Non Debian/Ubuntu systems    ✅ Ubuntu/Debian convention
+        ✅ Quick configuration          ✅ Team managed servers
+
+################################################################################
+
+practical workflow with conf.d:
+*******************************
+        # 1. Create your config
+        ***********************
+        vim /etc/nginx/conf.d/demo.conf
+
+        # 2. Test config before 
+        ***********************
+        nginx -t
+        ✅ nginx: configuration file test is successful
+
+        # 3. Reload nginx
+        *****************
+        nginx -s reload
+        # or
+        ****
+        systemctl reload nginx
+
+        # 4. Disable without deleting
+        *****************************
+        mv /etc/nginx/conf.d/demo.conf \
+        /etc/nginx/conf.d/demo.conf.disabled
+
+        # 5. Re-enable
+        **************
+        mv /etc/nginx/conf.d/demo.conf.disabled \
+        /etc/nginx/conf.d/demo.conf

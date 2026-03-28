@@ -1,0 +1,34 @@
+---
+# Apply baseline to ALL hosts
+- name: Apply common configuration
+  hosts: all
+  become: true
+  roles:
+    - role: common
+
+# Configure web servers
+- name: Deploy Nginx web servers
+  hosts: webservers
+  become: true
+  roles:
+    - role: nginx
+      vars:
+        nginx_server_name: '{{ app_domain }}'
+        nginx_root: /var/www/{{ app_name }}
+
+# Configure database servers
+- name: Deploy MySQL database
+  hosts: databases
+  become: true
+  vars:
+    mysql_root_password: '{{ db_root_password }}'
+    mysql_databases:
+      - name: '{{ app_name }}'
+        encoding: utf8mb4
+    mysql_users:
+      - name: appuser
+        host: '%'
+        password: '{{ db_app_password }}'
+        priv: '{{ app_name }}.*:ALL'
+  roles:
+    - role: geerlingguy.mysql

@@ -1,0 +1,29 @@
+apiVersion: v2
+name: mywebapp
+description: A Helm chart for Kubernetes
+type: application
+version: 0.1.0
+appVersion: "1.16.0"
+
+keywords:
+ - web
+ - nginx
+maintainers:
+ - name: Bonny
+   email: jofranco1203@gmail.com
+
+
+icon: https://helm.sh/img/helm.svg
+
+
+dependencies:
+ - name: postgresql
+   version: "12.x.x" # Use semver ranges for minor/patch auto-updates
+   repository: "https://charts.bitnami.com/bitnami"
+   condition: postgresql.enabled # Only deploy if explicitly enabled
+ - name: redis
+   version: "17.x.x"
+   repository: "https://charts.bitnami.com/bitnami"
+   condition: redis.enabled 
+   tags:
+     - cache

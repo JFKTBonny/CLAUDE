@@ -1,0 +1,17 @@
+# Each team runs their own container
+docker run -itd \
+  -p 8081:80 \
+  -v $PWD/team-a/site:/var/www/team-a \
+  -v $PWD/team-a/conf.d:/etc/nginx/conf.d \
+  --name team-a \
+  nginx
+
+docker run -itd \
+  -p 8081:80 \
+  -v /home/bonny/CLAUDE/website-templates/interio:/var/www/interio \
+  -v /home/bonny/CLAUDE/Nginx/conf/single_static_website/nginx.conf:/etc/nginx/conf.d/nginx.conf \
+  --name interio \
+  nginx
+
+
+/home/bonny/CLAUDE/Nginx/conf/single_static_website/nginx.conf

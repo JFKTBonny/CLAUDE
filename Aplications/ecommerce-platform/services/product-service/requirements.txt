@@ -1,0 +1,20 @@
+# services/product-service/requirements.txt
+
+# Web framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+
+# Database
+sqlalchemy==2.0.25
+pymysql==1.1.0
+cryptography==42.0.0        # required by pymysql for auth
+
+# Auth
+python-jose[cryptography]==3.3.0   # JWT decode/verify
+
+# Validation (already bundled with FastAPI but pinned for stability)
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# HTTP client (for inter-service calls if needed)
+httpx==0.26.0

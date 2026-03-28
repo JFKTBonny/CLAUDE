@@ -1,0 +1,49 @@
+package.json
+************
+
+{
+  "name": "api-gateway",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev":   "nodemon src/index.js",
+    "test":  "jest --coverage"
+  },
+  "dependencies": {
+    "express":            "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "jsonwebtoken":       "^9.0.2",
+    "axios":              "^1.6.0"
+  },
+  "devDependencies": {
+    "jest":      "^29.7.0",
+    "supertest": "^6.3.3",
+    "nodemon":   "^3.0.2"
+  }
+
+}
+
+dependencies — packages needed in production (shipped in Docker image):
+***********
+
+express — the HTTP server framework
+*******
+express-rate-limit — limits requests per IP to prevent abuse
+******************
+jsonwebtoken — verifies JWT tokens sent by clients
+************
+axios — makes HTTP requests to downstream services
+*****
+
+devDependencies — only used locally/in CI, never in production:
+***************
+
+jest — test runner
+****
+supertest — lets you test HTTP endpoints without starting a real server
+*********
+nodemon — auto-restarts server on file changes during development
+*******
+
+In Dockerfile: "" RUN npm ci --omit=dev ""   install only dependencies; not devdependencies
+*************

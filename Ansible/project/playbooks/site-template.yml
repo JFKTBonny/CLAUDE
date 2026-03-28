@@ -1,0 +1,95 @@
+---
+- name: Installing packages and configuring webservers
+  hosts: webservers
+  become: true
+  vars:
+    nginx_user: www-data
+    nginx_worker_processes: auto
+    nginx_port: 80
+    nginx_server_name: localhost
+    nginx_root: /var/www/html
+    nginx_enable_gzip: true
+    nginx_proxy_read_timeout: 30
+    nginx_extra_locations: []
+
+  pre_tasks:
+    - name: Create nginx_root directory
+      ansible.builtin.file:
+        path: "{{ nginx_root }}"
+        state: directory
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_user }}"
+        mode: '0755'
+
+  tasks:
+    - name: Install required packages
+      ansible.builtin.apt:
+        name: [nginx, curl, git]
+        state: present
+        update_cache: yes
+
+    - name: Create application users 
+      ansible.builtin.user:
+        name: "{{ item.name }}"
+        groups: "{{ item.groups }}"
+        state: present
+      loop:
+        - { name: deploy, groups: 'www-data' }
+        - { name: monitor, groups: 'adm' }
+
+    - name: Copy static website files
+      ansible.builtin.copy:
+        src: static/
+        dest: "{{ nginx_root }}/"
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_user }}"
+        mode: '0644'
+
+    - name: Deploy nginx main config
+      ansible.builtin.template:
+        src: templates/nginx.conf.j2
+        dest: /etc/nginx/nginx.conf
+        owner: root
+        group: root
+        mode: '0644'
+        validate: 'nginx -t -c %s'
+      notify: reload_nginx
+
+    - name: Deploy nginx vhost config
+      ansible.builtin.template:
+        src: templates/vhost.conf.j2
+        dest: /etc/nginx/sites-enabled/default
+        owner: root
+        group: root
+        mode: '0644'
+      notify: reload_nginx
+
+    - name: Ensure Nginx is started and enabled
+      ansible.builtin.systemd:
+        name: nginx
+        state: started
+        enabled: true
+      ignore_errors: true
+
+    - name: Flush handlers
+      ansible.builtin.meta: flush_handlers
+
+    - name: Configure firewall (non-container only)
+      ansible.builtin.shell: |
+        iptables -C INPUT -p tcp --dport {{ nginx_port }} -j ACCEPT 2>/dev/null || \
+        iptables -A INPUT -p tcp --dport {{ nginx_port }} -j ACCEPT
+      when: ansible_facts['virtualization_type'] != "docker"
+
+  handlers:
+    - name: reload_nginx
+      block:
+        - name: Test nginx config
+          ansible.builtin.command: nginx -t
+          changed_when: false
+
+        - name: Reload nginx
+          ansible.builtin.shell: nginx -s reload
+          args:
+            executable: /bin/bash
+          ignore_errors: true
+      become: true

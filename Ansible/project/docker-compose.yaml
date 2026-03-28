@@ -1,0 +1,79 @@
+version: '3.8'
+services:
+  web1:
+    image: ubuntu:22.04
+    container_name: web1
+    ports:
+      - "2221:22"
+      - "8081:80"
+    volumes:
+      - web1_data:/data
+    command: >
+      bash -c "
+        apt-get update &&
+        apt-get install -y openssh-server nginx &&
+        echo 'root:root' | chpasswd &&
+        sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config &&
+        echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config &&
+        mkdir -p /var/run/sshd &&
+        service ssh start &&
+        nginx -g 'daemon off;' &&
+        tail -f /dev/null"
+    networks:
+      - ansible-lab
+
+  web2:
+    image: ubuntu:22.04
+    container_name: web2
+    ports:
+      - "2222:22"
+      - "8082:80"
+    volumes:
+      - web2_data:/data
+    command: >
+      bash -c "
+        apt-get update &&
+        apt-get install -y openssh-server nginx &&
+        echo 'root:root' | chpasswd &&
+        sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config &&
+        echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config &&
+        mkdir -p /var/run/sshd &&
+        service ssh start &&
+        nginx -g 'daemon off;' &&
+        tail -f /dev/null"
+    networks:
+      - ansible-lab
+
+  db1:
+    image: ubuntu:22.04
+    container_name: db1
+    ports:
+      - "2223:22"
+      - "8083:80"
+    volumes:
+      - db1_data:/data
+    command: >
+      bash -c "
+        apt-get update &&
+        apt-get install -y openssh-server nginx &&
+        echo 'root:root' | chpasswd &&
+        sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config &&
+        echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config &&
+        mkdir -p /var/run/sshd &&
+        service ssh start &&
+        nginx -g 'daemon off;' &&
+        tail -f /dev/null"
+    networks:
+      - ansible-lab
+
+volumes:
+  web1_data:
+  web2_data:
+  db1_data:
+
+networks:
+  ansible-lab:
+    driver: bridge
+
+
+

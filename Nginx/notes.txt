@@ -1,0 +1,105 @@
+######################
+####### NGINX ########
+######################
+
+Nginx is a high-performance webserver, reverse proxy, loadbalancer, and HTTP cache...
+It uses an even-driven, asynchronous architecture,handling thousands of concurent connections with minimal memory...
+
+####  Configuration Structure:
+         The config file lives in /etc/nginx/nginx.conf:
+         **********************************************
+ http {
+    server {           # virtual host
+        listen 80;
+        server_name example.com;
+
+        location / {   # URL matching
+            root /var/www/html;
+            index index.html;
+        }
+    }
+}
+
+# key  contexts: main -> events -> http -> server -> location 
+  *************
+# The  Server Blocks configuration (Virtual Hosts) is how nginx decides which server block handles a request...
+             . it listens(listen in config) first, then moves to the server name(server_name in config)...
+             . Falls back to the default_server if no name matches...     
+# Location Blocks & Matching Priority:
+  ***********************************
+location = /exact    { }   # 1. Exact match (highest priority)
+location ^~ /prefix  { }   # 2. Preferential prefix
+location ~ \.php$    { }   # 3. Regex (case-sensitive)
+location ~* \.jpg$   { }   # 4. Regex (case-insensitive)
+location /prefix     { }   # 5. Prefix match (lowest priority)  
+
+# Reverse Proxy:
+  *************   It is commomly used to forward requests to an app server:
+location / {
+    proxy_pass http://localhost:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+} 
+
+# Load Balancing:
+  **************
+upstream backend {
+    least_conn;                   # Strategy: round_robin (default), least_conn, ip_hash
+    server backend1.example.com;
+    server backend2.example.com weight=3;
+    server backend3.example.com backup;
+} 
+
+# SSL/TLS Termination:
+  *******************
+It always redirect HTTP -> HTTPS with a separate ""  server { listen 80; return 301 https://... } ""
+server {
+    listen 443 ssl;
+    ssl_certificate     /etc/ssl/cert.pem;
+    ssl_certificate_key /etc/ssl/key.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+}
+
+# Key Directives to Know:
+*************************
+Directive                                           Purpose
+root/alias                        File serving path alias replaces the location path
+try_files                         Fallback chain(critical for SPAs: try_files $uri /index.html)
+return/rewrite                    Redirects and URL rewriting
+proxy_pass                        Forward to upstream
+gzip on                           Enable compression
+expires                           cache-control headers
+
+# Important Variables: $host, $uri, $args, $remote_addr, $request_method, $http_referer, $scheme...
+*********************
+     They are used heavily in rewrites and headers...
+
+# Performance Tuning Essentials:
+*******************************
+
+worker_processes auto;          # Match CPU cores
+worker_connections 1024;        # Per worker
+keepalive_timeout 65;
+gzip on;
+gzip_types text/plain application/json application/javascript text/css;
+sendfile on;                    # Efficient file transfer
+tcp_nopush on;
+
+# Essential CLI Commands:
+************************
+nginx -t                                 # Test config syntax
+nginx -s reload                          # Graceful reload (no downtime)
+nginx -s stop                            # Fast shutdown
+systemctl status nginx                   # Check service status
+tail -f /var/log/nginx/error.log         # Debug
+
+# Common Pitfalls:
+*****************
+. root vs alias:                         easy to mix up ,causes 404s
+. Forgetting "" proxy_set_header"":      app sees wrong IP/host
+. Location block order:                  regex beats prefix unless ^~ is used
+. Not testing before reload:             always run "" nginx -t "" first
+. if directive:                          notoriously buggy; prefer "" try_files"" or "" map "" instead
+
+

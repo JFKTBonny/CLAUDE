@@ -1,0 +1,45 @@
+
+# Register fresh
+*****************
+curl -s -X POST http://localhost:3000/api/users/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"bonny@ecommerce.com","password":"password123","firstName":"Bonny","lastName":"Walter"}' \
+  | python3 -m json.tool
+
+# Login and grab token
+**********************
+TOKEN=$(curl -s -X POST http://localhost:3000/api/users/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"bonny@ecommerce.com","password":"password123"}' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+
+echo "✅ TOKEN: $TOKEN"
+
+# Create products
+*****************
+curl -s -X POST http://localhost:3000/api/products \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Laptop","price":999.99,"sku":"LAP-001","stock":10}' \
+  | python3 -m json.tool
+
+curl -s -X POST http://localhost:3000/api/products \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Phone","price":599.99,"sku":"PHO-001","stock":25}' \
+  | python3 -m json.tool
+
+# Create an order
+*****************
+curl -s -X POST http://localhost:3000/api/orders \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":1,"product_id":1,"quantity":2,"total_price":1999.98}' \
+  | python3 -m json.tool
+
+
+
+
+
+
+

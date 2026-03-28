@@ -1,0 +1,31 @@
+# Site 1: Marketing site
+# /etc/nginx/conf.d/marketing.conf
+server {
+    listen 80;
+    server_name marketing.local www.marketing.local;
+    root /var/www/marketing;
+    index index.html;
+ 
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}
+ 
+# Site 2: API backend proxy
+# /etc/nginx/conf.d/api.conf
+server {
+    listen 80;
+    server_name api.local;
+ 
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+    }
+}
+ 
+# Site 3: Default catch-all (returns 444 = close without response)
+# /etc/nginx/conf.d/default.conf
+server {
+    listen 80 default_server;
+    server_name _;        # underscore = match-nothing placeholder
+    return 444;
+}

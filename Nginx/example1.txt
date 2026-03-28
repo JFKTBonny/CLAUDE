@@ -1,0 +1,26 @@
+# Create a simple static site
+Mkdir sudo mkdir -p /var/www/demo/{assets,uploads}
+echo '<h1>Nginx Demo</h1>' | sudo tee /var/www/demo/index.html
+echo 'body { color: teal; }' | sudo tee /var/www/demo/assets/style.css
+ 
+# /etc/nginx/conf.d/demo.conf
+server {
+    listen 80;
+    server_name demo.local;
+    root /var/www/demo;
+ 
+    location / {
+        try_files $uri $uri/ =404;
+    }
+ 
+    location /assets/ {
+        # Serves /var/www/demo/assets/*
+        expires 30d;
+        add_header Cache-Control "public, no-transform";
+    }
+ 
+    location /uploads/ {
+        autoindex on;
+    }
+
+}    

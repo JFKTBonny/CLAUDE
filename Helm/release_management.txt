@@ -1,0 +1,11 @@
+ Release Management & Versioning
+ ###############################
+
+1- Every helm upgrade creates a new revision (tracked as Kubernetes Secrets)
+   ******************
+2- helm rollback myapp 2 reverts to revision 2
+   *********************
+3- Use """ --atomic """ flag to auto-rollback if an upgrade fails
+       ****************
+3- Use """ --dry-run """ to simulate without applying changes
+       *****************

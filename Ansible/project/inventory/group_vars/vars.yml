@@ -1,0 +1,8 @@
+---
+# Reference vault vars through clean names
+db_root_password: '{{ vault_db_root_password }}'
+db_app_password:  '{{ vault_db_app_password }}'
+
+# General config
+app_name: myapp
+app_domain: myapp.example.com

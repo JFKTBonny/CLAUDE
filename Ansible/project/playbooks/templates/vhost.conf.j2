@@ -1,0 +1,41 @@
+server {
+    listen {{ nginx_port }};
+    server_name {{ nginx_server_name }};
+
+    root {{ nginx_root }};
+    index index.html index.htm;
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+
+    # TIMEOUTS
+    proxy_connect_timeout 5s;
+    proxy_send_timeout 10s;
+    proxy_read_timeout {{ nginx_proxy_read_timeout | default(30) }}s;
+
+    # Gzip compression
+    gzip {{ 'on' if nginx_enable_gzip | default(true) else 'off' }};
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+    location / {
+    root {{ nginx_root }};           
+    index index.html index.htm;        
+    try_files $uri $uri/ =404;
+   }
+
+
+    {% for location in nginx_extra_locations | default([]) %}
+    location {{ location.path }} {
+        proxy_pass {{ location.backend }};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    {% endfor %}
+
+    access_log /var/log/nginx/{{ nginx_server_name }}_access.log;
+    error_log  /var/log/nginx/{{ nginx_server_name }}_error.log;
+}

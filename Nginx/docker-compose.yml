@@ -1,0 +1,92 @@
+# /home/bonny/CLAUDE/docker-compose.yml
+
+version: '3.8'
+
+services:
+
+  droll:
+    image: nginx:stable-alpine      # lighter, more secure 
+    container_name: droll
+    volumes:
+      - /home/bonny/CLAUDE/website-templates/droll:/var/www/droll:ro
+      - /home/bonny/CLAUDE/Nginx/conf/single_static_website/droll/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - droll_logs:/var/log/nginx
+    networks:
+      - apps-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+
+  dreamy:
+    image: nginx:stable-alpine
+    container_name: dreamy
+    volumes:
+      - /home/bonny/CLAUDE/website-templates/dreamy:/var/www/dreamy:ro
+      - /home/bonny/CLAUDE/Nginx/conf/single_static_website/dreamy/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - dreamy_logs:/var/log/nginx
+    networks:
+      - apps-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+
+  interio:
+    image: nginx:stable-alpine
+    container_name: interio
+    volumes:
+      - /home/bonny/CLAUDE/website-templates/interio:/var/www/interio:ro
+      - /home/bonny/CLAUDE/Nginx/conf/single_static_website/interio/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - interio_logs:/var/log/nginx
+    networks:
+      - apps-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+
+  load-balancer:
+    image: nginx:stable-alpine
+    container_name: load-balancer
+    ports:
+      - "80:80"
+    volumes:
+      - /home/bonny/CLAUDE/Nginx/conf/lb/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - lb_logs:/var/log/nginx
+    networks:
+      - apps-net
+    restart: unless-stopped
+    depends_on:
+      droll:
+        condition: service_healthy
+      dreamy:
+        condition: service_healthy
+      interio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+
+networks:
+  apps-net:
+    driver: bridge
+
+
+volumes:
+  droll_logs:
+  dreamy_logs:
+  interio_logs:
+  lb_logs:

@@ -1,0 +1,7 @@
+---
+vault_db_password: 'SuperSecretPass123!'
+vault_api_key: 'sk-abc123xyz789'
+vault_ssl_key: |
+  -----BEGIN RSA PRIVATE KEY-----
+  MIIEowIBAAKCAQEA...
+  -----END RSA PRIVATE KEY-----

@@ -1,0 +1,20 @@
+---
+roles:
+  - name: geerlingguy.mysql
+    version: '3.3.0'
+  - name: geerlingguy.nginx
+    version: '3.1.0'
+
+collections:
+  - name: community.general
+    version: '7.0.0'
+  - name: amazon.aws
+    version: '6.0.0'
+  - name: ansible.posix
+    version: '1.5.0'
+
+# Install everything from requirements.yml
+
+# ansible-galaxy install -r requirements.yml
+
+# ansible-galaxy collection install -r requirements.yml

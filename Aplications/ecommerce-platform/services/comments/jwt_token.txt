@@ -1,0 +1,223 @@
+                                                ####################################
+                                                ##### Who Generates the Token? #####
+                                                ####################################
+
+    The User Service (Java/Spring Boot) — specifically JwtService.java:
+    ***********************************                ***************    
+
+        javapublic String generateToken(UserDTO user) {
+            SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
+            return Jwts.builder()
+                    .subject(user.getEmail())
+                    .claim("userId",    user.getId())
+                    .claim("firstName", user.getFirstName())
+                    .issuedAt(new Date())
+                    .expiration(new Date(System.currentTimeMillis() + jwtExpiration))
+                    .signWith(key)
+                    .compact();
+        }
+
+
+This happens **only on login**:
+******************************
+
+    POST /api/users/login
+            │
+            ▼
+    UserController  →  UserService.authenticate()  →  JwtService.generateToken()
+            │
+            ▼
+    returns { token: "eyJ...", user: {...} }
+    
+    The token contains:
+    ******************
+        json{
+        "sub":       "bonny3@test.com",
+        "userId":    1,
+        "firstName": "Bonny",
+        "iat":       1774651182,    ← issued at (unix timestamp)
+        "exp":       1774737582     ← expires at (24h later)
+        }
+                                            ##############################
+                                            ## Who Validates the Token? ##
+                                            ##############################
+Two places — and this is the important part:
+*******************************************
+
+1. API Gateway — index.js
+   **********************
+        javascriptconst authenticate = (req, res, next) => {
+            const token = req.headers['authorization']?.split(' ')[1];
+            if (!token) return res.status(401).json({ error: 'Unauthorized' });
+            try {
+                req.user = jwt.verify(token, JWT_SECRET);  // ← validates here
+                next();
+            } catch {
+                return res.status(403).json({ error: 'Invalid token' });
+            }
+        };
+
+The gateway validates the token before forwarding the request. "" Invalid tokens never reach the services. ""...
+
+2. Each Microservice independently
+   *******************************
+
+Product Service :  """ auth.py """
+***************
+
+        pythonasync def verify_token(authorization: str = Header(...)):
+            token = authorization.split(" ")[1]
+            jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+
+        Order Service — middleware.go
+
+        gotoken, err := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
+            return []byte(secret), nil
+        })
+
+
+
+                                    #################################
+                                    ## Why Validate in Two Places? ##
+                                    #################################
+
+Client
+  │
+  ▼
+API Gateway  ←── validates token       (first line of defense)
+  │
+  ▼
+Microservice ←── validates token again (defense in depth)
+
+
+The 2 places validation  is called **defense in depth**:
+                                     ****************
+        - The gateway protects against unauthenticated traffic
+        - Each service protects itself in case someone **bypasses the gateway** and calls it directly — [which is possible since ports `8081`, `8082`, `8083` are exposed]
+
+
+In a real production setup:
+**************************
+   1- you would **not expose service ports** publicly...
+   2- only the gateway port `3000` would be accessible. [Then only the gateway validates and services trust it blindly...]
+
+
+
+## The Secret Key is the Trust Anchor
+*************************************
+
+.env
+  JWT_SECRET=bonny-walter-super-secret-key-2024
+       │
+       ├──→ User Service    (signs the token with this key)
+       ├──→ API Gateway     (verifies with this key)
+       ├──→ Product Service (verifies with this key)
+       └──→ Order Service   (verifies with this key)
+
+
+**All 4 services share the same secret.** This is why:
+*****************************************************
+        - If the secret is different in any service → token verification fails → `403`
+        - If the secret leaks → anyone can forge tokens → security breach
+
+[""" This is called **symmetric signing** (HMAC-SHA256) — same key signs and verifies."""]
+
+A more secure approach used in large systems is **asymmetric signing** (RS256) where:
+************************************************************************************
+        - User service has a **private key** to sign
+        - All other services have only the **public key** to verify
+        - A leaked public key can't forge tokens
+
+
+                ##########################
+                ## Full Token Lifecycle ##
+                ##########################
+
+1. REGISTER    →  user created in DB, no token yet
+
+2. LOGIN       →  user-service verifies password
+                  generates token signed with JWT_SECRET
+                  returns token to client
+
+3. CLIENT      →  stores token (memory, localStorage, etc.)
+                  sends it on every request:
+                  Authorization: Bearer eyJhbG...
+
+4. GATEWAY     →  extracts token from header
+                  verifies signature + expiry
+                  if valid → forwards request
+                  if invalid → 401/403, request dies here
+
+5. SERVICE     →  receives forwarded request
+                  optionally re-verifies token
+                  processes business logic
+
+6. EXPIRY      →  after 24h token is invalid
+                  client must login again to get new token
+
+#########################################################################
+where the api gateway gets token informations in order to validate
+The gateway gets the token from the request header sent by the client.
+#########################################################################
+
+The Flow
+********
+Client sends:
+************
+        POST http://localhost:3000/api/products
+        Headers:
+        Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIi...
+
+
+The gateway extracts it here:
+****************************
+        javascriptconst authenticate = (req, res, next) => {
+            // "Authorization: Bearer eyJhbG..."
+            //                         ↑
+            //              split on space, take index [1]
+            const token = req.headers['authorization']?.split(' ')[1];
+
+What jwt.verify() Does Internally:
+*********************************
+        javascriptreq.user = jwt.verify(token, JWT_SECRET);
+
+
+It does **3 checks locally** — no database, no network call:
+***********************************************************
+
+token = eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJib25ueTN.Hj_pDNQ...
+              │                        │                  │
+         HEADER                   PAYLOAD            SIGNATURE
+      (algorithm)              (your data)        (tamper proof)
+
+Check 1 → re-sign HEADER+PAYLOAD with JWT_SECRET
+           compare result with SIGNATURE
+           if different → token was tampered → reject
+
+Check 2 → read "exp" claim from PAYLOAD
+           compare with current time
+           if expired → reject
+
+Check 3 → if both pass → decode PAYLOAD into req.user:
+           {
+             sub:       "bonny3@test.com",
+             userId:    1,
+             firstName: "Bonny",
+             iat:       1774651182,
+             exp:       1774737582
+           }
+
+
+
+
+## Key Insight
+**************
+
+The gateway **never calls the user-service** to validate a token. 
+It validates **entirely on its own** using only the `JWT_SECRET`. 
+That's the elegance of JWT —[ the token is **self-contained** and **stateless**. ]...
+
+❌ Old approach (session based):  Client → Gateway → Database ("is this session valid?") → answer
+*******************************
+
+✅ JWT approach: Client → Gateway → math check with JWT_SECRET → answer (no network call, no database, microseconds)

@@ -1,0 +1,22 @@
+---
+- name: install apache2
+  hosts: webservers
+  become: true
+  tasks:
+    - name: Install Apache on Debian systems only
+      ansible.builtin.apt:
+        name: apache2
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: Install httpd on RedHat systems
+      ansible.builtin.yum:
+        name: httpd
+        state: present
+      when: ansible_os_family == 'RedHat'
+
+    # - name: Run only if a variable is set
+    #   ansible.builtin.debug:
+    #     msg: 'Variable is {{ my_var }}'
+    #   when: my_var is defined
+    # - name: install apache2

@@ -1,0 +1,285 @@
+############## Core Architecture ###############
+- Control Node:   the machine where absible is installed
+- Managed Nodes:  the target hosts ansible configures(no agent needed)
+- Agentless:      communicates over SSH(Linux) or WinRM(Windows)
+- Idempotency:    running the same playbook multiple times produces the same result...
+
+################ Inventory ################
+- Defines which hosts/groups ansible manages..
+- Can be static(INI or YAML files) or dynamic(scripts,plugin for AWS,GCP,etc)
+- Key concepts: host groups, group variables(group_vars/), host variables(host_vars/)
+
+#################### Playbooks ###################
+- Written in YAML(the heart of ansible automation)
+- Define ordered lists of plays,each targeting hosts and running tasks
+- key directives: 
+             1- hosts
+             2- become
+             3- vars 
+             4- tasks
+             5- handlers
+             6- tags
+
+############## tasks & Modules ###############
+A task calls a module to perform one unit of work...
+Essential built-in modules to know:
+              - ansible.builtin.copy,template,file  (for file management)
+              - apt,yum,dnf (for package management)
+              - service,systemd (for service control)
+              - command, shell, raw (for running commands)
+              - user, group (for user management)
+              - uri (for HTTP requests)
+              - debug (for printing values)
+
+###################### variables ####################
+Defined in Inventory, playbooks[group_vars,host_vars], or passed via CLI [-e]
+Uses Jinja2 syntax: {{ variable_name}}
+
+###################### Roles ###########################
+   . Is a strucrured way to organize reusable automation...
+   . Standard directory layout [ tasks/, handlers/, templates/, files/, vars/, defaults/, meta/]
+   . promotes reusability and separation of concerns...
+
+####################### Templates(Jinja2) #######################
+   * they are ".j2 " files used to generate dynamic config files... 
+   * they support variables, loops({% for %}), conditionals({% if %}), filters( | upper, |default() )
+
+####################### Handlers #################################
+   . They are tasks triggered only when notified by another task ( e,g restart a service only if config changed)
+   . Run once at the end of a play, even if notified multiple times
+
+######################## Conditionals & Loops ######################
+   - when [ for running a task only if a condition is true ]
+   - loop: /with_items: [ for iterate over a list]
+   - register: [ for capturing task output into a variable for later use]
+
+########################## Ansible Vault #############################
+    . It encrypts sensitive data(passwords, keys) at rest...
+    . Commands used: "" ansible-vault encrypt, decrypt, edit, view ""
+    . It uses following flags at runtime: "" --ask-vault-pass or --vault-password-file""
+
+########################## Galaxy & Collections ########################
+    * Ansible Galaxy is the hub for sharing roles and collections...
+    * collections are packaged bundles, plugins, roles...
+    * the command to install is :  "" ansible-galaxy collection install <name> ""
+
+######################### key CLI Commands #############################
+ansible -m ping all          to test connectivity
+ansible-paybook site.yaml    run the playbook named site.yaml
+ansible-inventory  --list    to view  inventory
+ansible-doc <module>         to get module documentation
+ansible-vault encrypt file   to encrypt a file
+ansible-galaxy install role  to install a role      
+
+######################## Ad-hoc Commands ####################################
+Syntax:  ansible <pattern> -i <inventory> -m <module> -a '<arguments>'
+******
+       example: ansible all -i inventory/hosts.yaml -m shell -a "apt update && apt upgrade -y" -b
+       *******
+
+############################ Gathering Facts ####################################
+Facts are variables automatically gathered about each host...[ OS, IP, memory,etc...]
+examples:
+********  -  ansible web1 -i inventory/hosts.yml -m ansible.builtin.setup (to gather and display all facts)...
+          -  ansible web1 -i inventory/hosts.yml -m setup -a 'filter=ansible_distribution*'( to filter specific facts)...
+
+####  Useful fact variables:
+   
+    {{ ansible_os_family }}     : "Debian","RedHat"
+    {{ ansible_distribution }}  : "Ubuntu", "centos"
+    {{ ansible_memtotal_mb }}   : total RAM in MB
+    {{ ansible_default_ipv4 }}  : default IP info         
+   
+######################### Essential Module:
+      - command [e.g: ansible all -m command -a 'uptime'] 
+      - shell   [ e.g: ansible -m shell -a 'df -h | grep /dev']
+      - copy    [ e.g: ansible web1 -m copy -a 'src=./file.txt dest=/tmp/file.txt]
+      - file    [ e.g: ansible all -m file -a 'path=/tmp/test state=directory mode=0755'] 
+      - apt     [ e.g: ansible webservers -m apt -a 'name=curl state=present' -b ] 
+      - service [ e.g ansible webservers -m service -a 'name=nginx state=started' -b]
+      - user    [ e.g: ansible all -m user -a 'name=deploy state=present' -b]
+      - uri     [ e.g: ansible web1 -m uri -a 'url=http://localhost return_content=yes' ]
+      - debug   [ used in playbooks only ]
+
+################################ Playbooks , Variables, & Control Flow ##################################
+Playbooks are YAML that describe the desired state of your infrastructure...
+Examples:
+*********
+   Basic run :   ansible-playbook -i inventory/hosts.yaml playbooks/site.yaml
+   *********
+   Dry-run(check mode - no changes made): ansible-playbook -i inventory/hosts.yml playbooks/site.yml --check
+   *************************************
+   Limit to specific hosts: ansible-playbook -i inventory/hosts.yml playbooks/site.yml --limit web1
+   ***********************
+   Run only tasks tagged "install": ansible-playbook -i inventory/hosts.yml playbooks/site.yml --tags install
+   ******************************
+   Pass extra variable at runtime: ansible-playbook -i inventory/hosts.yml playbooks/site.yml -e app_port=9090
+   ******************************
+
+################## Variables: 5 most important sources...
+            1- Extra vars (-e)  [ ansible-playbook site.yml -e 'port=9090' ( high priority) ]
+            2- host_vars/       [ inventory/host_vars/web1.yml ] 
+            3- group_vars/      [ inventory/group_vars/webservers.yml ]
+            4- playbook vars:   [ vars: section inside a play ]
+            5- Role defaults    [ roles/nginx/defaults/main.yml (lowest priority)]
+            
+#################### Roles & Jinja2 Templates ##################################
+  ansible-galaxy command syntax example to generate a role skeleton: ansible-galaxy role init roles/nginx
+  *****************************************************************
+
+######################  Ansible Vault( Secrets Management) #####################
+Warnings:   Never store password, API keys, or Certificates in plain text...
+********  
+Ansible Vault encrypts sensitive data so that it can be safely stored in vcs like Git...
+
+Core Vault Commnads:
+*******************
+ansible-vault create secrets.yml      ----- Create a new encrypted file
+ansible-vault encrypt existing.yml    ----- Encrypt an existing plain text...
+ansible-vault decrypt secrets.yml     ----- Decrypt to plain text(use with caution) 
+ansible-vault edit secrets.yml        ----- Edit encrypted file in place
+ansible-vault view secrets.yml        ----- View contents without decrypting to disk
+ansible-vault rekey secrets.yml       ----- Change the encryption password...  
+
+#################################  To run a playbook protected by vault(vault.yaml in this case..) #########################
+       """ ansible-playbook site-template.yml --ask-vault-pass """
+
+###  Use password file ( for CI/CD pipelines)...
+         echo 'myvaultpass' > ~/.vault_pass.txt
+         chmod 600 ~/.vault_pass.txt
+         ansible-paybook site.yml  --vault-password-file ~/.vault_pass.txt
+
+### Set in ansible.cfg (recommended forprojects)
+# [defaults]
+# vault_password_file = ~/.vault_pass.txt                
+
+
+############################  Project Configuration ############################
+# ansible.cfg(file created within project directory)...
+      [defaults]
+      inventory          = inventory/hosts.yml
+      roles_path         = roles
+      vault_password_file = ~/.vault_pass.txt
+      host_key_checking  = False
+      retry_files_enabled = False
+      stdout_callback    = yaml
+
+      [privilege_escalation]
+      become       = True
+      become_method = sudo
+
+# ansible.cfg set
+# You can now just run: ansible-playbook site.yml —
+# No need to specify -i inventory or --vault-password-file every time.
+################################################################################
+######################### Galaxy & Collections #################################
+################################################################################
+
+Ansible Galaxy hosts thopusands of community-built roles and collections that be used immediately...
+
+   #############################################################################
+   ##################### installing Roles from Galaxy ##########################
+   #############################################################################
+   # Search for a role:
+        ansible-galaxy search mysql --author geerlingguy
+
+   # Install a role:
+        ansible-galaxy install geerlingguy.mysql
+
+   # Install a specific version:
+        ansible-galaxy install geerlingguy.mysql,3.3.0
+
+   # List installed roles:
+        ansible-galaxy list 
+
+   #############################################################################
+   ################ requirements.yml ---Pinned Dependencies ####################
+   #############################################################################
+
+   Always pin version in a requirement file:
+         
+      # requirements.yml
+            ---
+            roles:
+            - name: geerlingguy.mysql
+               version: '3.3.0'
+            - name: geerlingguy.nginx
+               version: '3.1.0'
+
+      # collections:
+            collections:
+            - name: community.general
+               version: '7.0.0'
+            - name: amazon.aws
+               version: '6.0.0'
+            - name: ansible.posix
+               version: '1.5.0'
+
+   #############################################################################
+   ################ Install everything from requirements.yml ###################
+   #############################################################################
+
+      ansible-galaxy install -r requirements.yml
+      ansible-galaxy collection install -r requirements.yml
+
+
+   ##############################################################################
+   ############################ Using a Galaxy Role in playbook #################
+   ##############################################################################
+
+# site.yml — using a community MySQL role
+*****************************************
+      ---
+      - name: Configure database servers
+      hosts: databases
+      become: true
+      vars:
+         mysql_root_password: '{{ vault_db_root_password }}'
+         mysql_databases:
+            - name: appdb
+            encoding: utf8mb4
+            collation: utf8mb4_unicode_ci
+         mysql_users:
+            - name: '{{ db_user }}'
+            host: '%'
+            password: '{{ vault_db_password }}'
+            priv: 'appdb.*:ALL'
+      roles:
+         - role: geerlingguy.
+    
+######################################################################## 
+################### Using collection Modules ###########################
+########################################################################
+
+# Using a module from the community.general collection
+******************************************************
+      - name: Send Slack notification when deploy completes
+      community.general.slack:
+         token: '{{ vault_slack_token }}'
+         msg: 'Deployment to {{ inventory_hostname }} complete!'
+         channel: '#deployments'
+
+# Using amazon.aws collection
+*****************************
+      - name: Ensure S3 bucket exists
+      amazon.aws.s3_bucket:
+         name: my-app-backups
+         state: present
+         region: us-east-1
+################################################################################                                          
+######################## Using a Role in playbook ##############################
+################################################################################
+# site.yml:
+**********
+      ---
+      - name: Configure web servers
+      hosts: webservers
+      become: true
+      roles:
+         - role: nginx
+            vars:                          # override defaults for this play
+            nginx_server_name: myapp.example.com
+            nginx_port: 80
+            nginx_root: /var/www/myapp
+
+

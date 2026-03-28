@@ -1,0 +1,142 @@
+// ── 1. IMPORTS ─────────────────────────────────────────────────────
+        const express   = require('express');
+        const axios     = require('axios');
+        const rateLimit = require('express-rate-limit');
+        const jwt       = require('jsonwebtoken');
+
+Load all required packages...
+**************************
+
+// ── 2. CONFIGURATION ───────────────────────────────────────────────
+        const app        = express();
+        const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
+
+        const SERVICES = {
+            user:    process.env.USER_SERVICE_URL    || 'http://user-service:8081',
+            product: process.env.PRODUCT_SERVICE_URL || 'http://product-service:8082',
+            order:   process.env.ORDER_SERVICE_URL   || 'http://order-service:8083',
+        };
+
+process.env.X || 'fallback' — reads from environment (.env file) with a safe default
+***************************
+SERVICES map — one place to manage all downstream URLs
+******************************************************
+
+
+// ── 3. GLOBAL MIDDLEWARE ───────────────────────────────────────────
+        app.use(rateLimit({ windowMs: 60_000, max: 100 }));
+        app.use(express.json());
+
+These run on every request before hitting any route:
+***************************************************
+
+rateLimit — max 100 requests per minute per IP
+*********
+express.json() — parses incoming JSON body so req.body is available
+**************
+
+
+// ── 4. AUTH MIDDLEWARE ─────────────────────────────────────────────
+        const authenticate = (req, res, next) => {
+            const token = req.headers['authorization']?.split(' ')[1];
+            if (!token) return res.status(401).json({ error: 'Unauthorized' });
+            try {
+                req.user = jwt.verify(token, JWT_SECRET);
+                next();
+            } catch {
+                return res.status(403).json({ error: 'Invalid token' });
+            }
+        };
+
+Extracts token from Authorization: Bearer <token> header
+*********************************
+jwt.verify() — checks signature + expiry against JWT_SECRET
+************
+next() — passes to the next handler if valid
+******
+Returns 401 if missing, 403 if invalid/expired
+
+
+
+// ── 5. PROXY FUNCTION ──────────────────────────────────────────────
+        const forward = (baseUrl) => async (req, res) => {
+            try {
+                const url = `${baseUrl}${req.originalUrl}`;
+
+                const response = await axios({
+                    method:  req.method,         // GET, POST, PATCH, DELETE
+                    url,                         // full downstream URL
+                    data:    req.body,           // forwarded request body
+                    headers: {
+                        'Content-Type':  'application/json',
+                        'Authorization': req.headers['authorization'] || '',
+                    },
+                    timeout:        30000,       // 30s before giving up
+                    validateStatus: () => true,  // don't throw on 4xx/5xx
+                });
+
+                res.status(response.status).json(response.data);
+            } catch (err) {
+                res.status(502).json({ error: 'Service unavailable' });
+            }
+        };
+
+This is the core of the gateway:
+*******************************
+
+Rebuilds the full URL: http://user-service:8081/api/users/login
+Forwards the original method, body, and auth header
+validateStatus: () => true — means a 404 from user-service is forwarded as-is rather than thrown as an error
+**************
+On network failure → returns 502 Bad Gateway
+******************
+
+
+// ── 6. ROUTES ──────────────────────────────────────────────────────
+
+// Public — no auth check
+*************************
+        app.post('/api/users/register', forward(SERVICES.user));
+        app.post('/api/users/login',    forward(SERVICES.user));
+
+// Protected — authenticate runs first, then forward
+****************************************************
+        app.use('/api/users',    authenticate, forward(SERVICES.user));
+        app.use('/api/products', authenticate, forward(SERVICES.product));
+        app.use('/api/orders',   authenticate, forward(SERVICES.order));
+
+```
+**Key design decisions:**
+- `/register` and `/login` are `app.post` — only POST allowed, no auth
+   *************************************
+- Everything else uses `app.use` — catches ALL HTTP methods (GET, POST, PATCH, DELETE)
+  *****************************
+- `authenticate` sits between the route and `forward` — acts as a gatekeeper
+  **************************************************
+- Route order matters — Express matches top to bottom, so `/api/users/register` must come **before** `/api/users/login`
+  *******************
+
+---
+#################################
+## How a request flows end-to-end
+#################################
+```
+POST /api/products  +  Bearer token
+         │
+         ▼
+   rate limiter        ← 100 req/min?
+         │
+         ▼
+   express.json()      ← parse body
+         │
+         ▼
+   authenticate()      ← valid JWT?
+         │
+         ▼
+   forward(product)    ← axios POST http://product-service:8082/api/products
+         │
+         ▼
+   product-service     ← handles it, returns JSON
+         │
+         ▼
+   res.json()          ← forwarded back to client

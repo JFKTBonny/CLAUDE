@@ -1,0 +1,8 @@
+The Chart declares dependencies in chart.yaml:
+example:
+*******  dependencies:
+            - name: postgresql
+              version: "12.x.x"
+              repository: "https://charts.bitnami.com/bitnami"
+
+Run "" helm dependency update "" to fetch them into /charts...              

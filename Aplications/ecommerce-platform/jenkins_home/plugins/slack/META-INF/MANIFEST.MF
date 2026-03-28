@@ -1,0 +1,32 @@
+Manifest-Version: 1.0
+Created-By: Maven Archiver 3.6.3
+Build-Jdk-Spec: 17
+Specification-Title: Slack Notification Plugin
+Specification-Version: 0.0
+Implementation-Title: Slack Notification Plugin
+Implementation-Version: 795.v4b_9705b_e6d47
+Group-Id: org.jenkins-ci.plugins
+Artifact-Id: slack
+Short-Name: slack
+Long-Name: Slack Notification Plugin
+Url: https://github.com/jenkinsci/slack-plugin
+Compatible-Since-Version: 2.32
+Plugin-Version: 795.v4b_9705b_e6d47
+Hudson-Version: 2.479.3
+Jenkins-Version: 2.479.3
+Plugin-Dependencies: apache-httpcomponents-client-5-api:5.5-150.veb_76e7
+ 19855b_,caffeine-api:3.2.0-166.v72a_6d74b_870f,commons-lang3-api:3.18.0
+ -98.v3a_674c06072d,workflow-step-api:704.ve4f0967e98fa_,credentials:141
+ 5.v831096eb_5534,display-url-api:2.209.v582ed814ff2f,jackson2-api:2.18.
+ 3-402.v74c4eb_f122b_2,junit:1335.v6b_a_a_e18534e1,mailer:489.vd4b_25144
+ 138f,matrix-project:849.v0cd64ed7e531;resolution:=optional,plain-creden
+ tials:199.v9f8e1f741799,script-security:1373.vb_b_4a_a_c26fa_00,structs
+ :350.v3b_30f09f2363,token-macro:444.v52de7e9c573d
+Plugin-Developers: Tim Jacomb:timja:
+Plugin-License-Name: MIT license
+Plugin-ScmConnection: scm:git:https://github.com/jenkinsci/slack-plugin.
+ git
+Plugin-ScmTag: 4b9705be6d473ee3c34cd18d678b9a03dcaf361b
+Plugin-ScmUrl: https://github.com/jenkinsci/slack-plugin
+Implementation-Build: 4b9705be6d473ee3c34cd18d678b9a03dcaf361b
+
