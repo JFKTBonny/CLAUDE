@@ -1,8 +1,8 @@
-// services/api-gateway/src/__tests__/gateway.test.js
 const request = require('supertest');
 const app     = require('../index');
 
 describe('API Gateway', () => {
+
     test('GET /health returns 200', async () => {
         const res = await request(app).get('/health');
         expect(res.status).toBe(200);
@@ -13,4 +13,12 @@ describe('API Gateway', () => {
         const res = await request(app).get('/api/orders');
         expect(res.status).toBe(401);
     });
+
+    test('Protected routes reject invalid token', async () => {
+        const res = await request(app)
+            .get('/api/products')
+            .set('Authorization', 'Bearer invalidtoken');
+        expect(res.status).toBe(403);
+    });
+
 });

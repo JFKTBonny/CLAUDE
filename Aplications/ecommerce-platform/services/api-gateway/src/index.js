@@ -1,7 +1,7 @@
-const express = require('express');
-const axios   = require('axios');
+const express   = require('express');
+const axios     = require('axios');
 const rateLimit = require('express-rate-limit');
-const jwt     = require('jsonwebtoken');
+const jwt       = require('jsonwebtoken');
 
 const app        = express();
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
@@ -15,7 +15,6 @@ const SERVICES = {
 app.use(rateLimit({ windowMs: 60_000, max: 100 }));
 app.use(express.json());
 
-// ── Auth middleware ────────────────────────────────────────────────
 const authenticate = (req, res, next) => {
     const token = req.headers['authorization']?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'Unauthorized' });
@@ -27,12 +26,9 @@ const authenticate = (req, res, next) => {
     }
 };
 
-// ── Generic proxy function ─────────────────────────────────────────
 const forward = (baseUrl) => async (req, res) => {
     try {
         const url = `${baseUrl}${req.originalUrl}`;
-        console.log(`[PROXY] ${req.method} ${url}`);
-
         const response = await axios({
             method:  req.method,
             url,
@@ -41,35 +37,33 @@ const forward = (baseUrl) => async (req, res) => {
                 'Content-Type':  'application/json',
                 'Authorization': req.headers['authorization'] || '',
             },
-            timeout: 30000,
-            validateStatus: () => true,  // forward all status codes
+            timeout:        30000,
+            validateStatus: () => true,
         });
-
         res.status(response.status).json(response.data);
     } catch (err) {
-        console.error(`[ERROR] ${err.message}`);
         res.status(502).json({ error: 'Service unavailable', detail: err.message });
     }
 };
 
-// ── Health ─────────────────────────────────────────────────────────
 app.get('/health', (_, res) => res.json({
     status:    'UP',
     version:   process.env.APP_VERSION || '1.0.0',
     timestamp: new Date().toISOString(),
-    services:  SERVICES,
 }));
 
-// ── Public routes ──────────────────────────────────────────────────
 app.post('/api/users/register', forward(SERVICES.user));
 app.post('/api/users/login',    forward(SERVICES.user));
-
-// ── Protected routes ───────────────────────────────────────────────
 app.use('/api/users',    authenticate, forward(SERVICES.user));
 app.use('/api/products', authenticate, forward(SERVICES.product));
 app.use('/api/orders',   authenticate, forward(SERVICES.order));
 
-app.listen(3000, () => {
-    console.log('🚀 API Gateway running on :3000');
-    console.log('Services:', SERVICES);
-});
+// Only start server if run directly, not when imported by tests
+if (require.main === module) {
+    app.listen(3000, () => {
+        console.log('🚀 API Gateway running on :3000');
+        console.log('Services:', SERVICES);
+    });
+}
+
+module.exports = app;   // ← export for testing
