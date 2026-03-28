@@ -8,12 +8,11 @@ services:
 
   mysql:
     image: mysql:8.0
-    env_file: .env
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASS:-secret}
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./infrastructure/docker/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
     networks: [ecommerce]
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
@@ -23,7 +22,6 @@ services:
   api-gateway:
     image: santonix/api-gateway:latest
     ports: ["3000:3000"]
-    env_file: .env
     environment:
       JWT_SECRET:          ${JWT_SECRET}
       USER_SERVICE_URL:    http://user-service:8081
@@ -34,7 +32,7 @@ services:
 
   user-service:
     image: santonix/user-service:latest
-    env_file: .env
+    ports: ["8081:8081"]
     environment:
       DB_HOST:    mysql
       DB_USER:    root
@@ -46,7 +44,7 @@ services:
 
   product-service:
     image: santonix/product-service:latest
-    env_file: .env
+    ports: ["8082:8082"]
     environment:
       DB_HOST:    mysql
       DB_USER:    root
@@ -59,7 +57,6 @@ services:
   order-service:
     image: santonix/order-service:latest
     ports: ["8083:8083"]
-    env_file: .env
     environment:
       DB_HOST:    mysql
       DB_USER:    root

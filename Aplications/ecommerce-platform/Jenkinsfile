@@ -36,9 +36,7 @@ pipeline {
                     def buildAll = (
                         changed == 'all'  ||
                         changed.isEmpty() ||
-                        currentBuild.getBuildCauses()
-                                    .toString()
-                                    .contains('UserIdCause')
+                        currentBuild.getBuildCauses().toString().contains('UserIdCause')
                     )
 
                     env.BUILD_GATEWAY = (buildAll || changed.contains('api-gateway'))     ? 'true' : 'false'
@@ -56,7 +54,6 @@ pipeline {
                     ----------------------------------------
                        Changed files: ${changed}
                        Full build:    ${buildAll}
-                       Trigger:       ${currentBuild.getBuildCauses()[0].shortDescription}
                     ========================================
                     """
                 }
@@ -74,7 +71,6 @@ pipeline {
                                 -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/api-gateway:/app \
                                 -w /app node:18-alpine \
                                 sh -c "npm ci && npm test -- --passWithNoTests --forceExit"
-                            echo "✅ API Gateway tests passed!"
                         '''
                     }
                 }
@@ -86,8 +82,7 @@ pipeline {
                             docker run --rm \
                                 -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/user-service:/app \
                                 -w /app maven:3.9-eclipse-temurin-17 \
-                                mvn test -q -Dsurefire.failIfNoSpecifiedTests=false || true
-                            echo "✅ User Service tests passed!"
+                                mvn test -q -Dsurefire.failIfNoSpecifiedTests=false
                         '''
                     }
                 }
@@ -99,8 +94,7 @@ pipeline {
                             docker run --rm \
                                 -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/product-service:/app \
                                 -w /app -e PYTHONPATH=/app python:3.11-slim \
-                                sh -c "pip install -r requirements.txt pytest -q && pytest tests/ -v --tb=short || true"
-                            echo "✅ Product Service tests passed!"
+                                sh -c "pip install -r requirements.txt pytest -q && pytest tests/ -v --tb=short"
                         '''
                     }
                 }
@@ -113,7 +107,6 @@ pipeline {
                                 -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/order-service:/app \
                                 -w /app golang:1.21-alpine \
                                 sh -c "go mod download && go test ./... -v"
-                            echo "✅ Order Service tests passed!"
                         '''
                     }
                 }
@@ -174,40 +167,32 @@ pipeline {
                     string(credentialsId: 'db-root-pass', variable: 'DB_ROOT_PASS')
                 ]) {
                     sh '''
-                        echo "🧹 Cleaning up ALL existing platform containers..."
+                        echo "🧹 Cleaning up project containers..."
 
-                        # Stop and remove ALL containers related to this platform
-                        # This covers: ecommerce-platform-*, deploy-*
-                        docker ps -a --format '{{.Names}}' \
-                            | grep -E "(ecommerce-platform|deploy-)" \
+                        docker ps -a --filter "name=ecommerce-platform" --format '{{.Names}}' \
                             | xargs docker rm -f 2>/dev/null || true
 
-                        # Remove orphan networks from failed deploys
-                        docker network ls --format '{{.Name}}' \
-                            | grep -E "(ecommerce|deploy-)" \
+                        docker network ls --filter "name=ecommerce-platform" --format '{{.Name}}' \
                             | xargs docker network rm 2>/dev/null || true
 
-                        echo "📋 Containers after cleanup:"
-                        docker ps -a | grep -E "(ecommerce|deploy-)" || echo "None — clean slate ✅"
+                        echo "📥 Pulling images via docker-compose..."
+                        docker-compose -p ecommerce-platform -f $COMPOSE_FILE pull
 
-                        echo ""
-                        echo "📥 Pulling latest images from Docker Hub..."
-                        docker pull santonix/api-gateway:latest
-                        docker pull santonix/user-service:latest
-                        docker pull santonix/product-service:latest
-                        docker pull santonix/order-service:latest
-
-                        echo ""
                         echo "🚀 Starting platform..."
                         JWT_SECRET=$JWT_SECRET \
                         DB_ROOT_PASS=$DB_ROOT_PASS \
                         docker-compose \
                             -p ecommerce-platform \
-                            -f /home/bonny/CLAUDE/Aplications/ecommerce-platform/docker-compose.yaml \
+                            -f $COMPOSE_FILE \
                             up -d
 
+                        echo "⏳ Waiting for services..."
+                        sleep 10
+
+                        echo "🔍 Verifying containers..."
+                        docker ps | grep ecommerce-platform || exit 1
+
                         echo "✅ Deployment complete!"
-                        docker ps | grep ecommerce
                     '''
                 }
             }
@@ -216,8 +201,8 @@ pipeline {
     }
 
     post {
-        success { echo "✅ Stage 5 passed — platform deployed!" }
-        failure { echo "❌ Stage 5 failed — check logs above" }
+        success { echo "✅ Pipeline succeeded — platform deployed!" }
+        failure { echo "❌ Pipeline failed — check logs above" }
         always  { cleanWs() }
     }
 }
@@ -230,6 +215,7 @@ def buildAndPush(String service, String contextPath) {
     )]) {
         sh """
             echo "🔨 Building ${service} v${VERSION}..."
+
             TMPDIR=\$(mktemp -d /tmp/jenkins-build-XXXXXX)
             cp -r ${contextPath}/. \$TMPDIR/
 
@@ -243,7 +229,259 @@ def buildAndPush(String service, String contextPath) {
             echo "\$DOCKER_PASS" | docker login -u "\$DOCKER_USER" --password-stdin
             docker push ${DOCKER_REGISTRY}/${service}:${VERSION}
             docker push ${DOCKER_REGISTRY}/${service}:latest
+
             echo "✅ ${service} pushed!"
         """
     }
 }
+
+
+// pipeline {
+
+//     agent any
+
+//     environment {
+//         DOCKER_REGISTRY  = 'santonix'
+//         VERSION          = "1.0.${BUILD_NUMBER}"
+//         COMPOSE_FILE     = '/home/bonny/CLAUDE/Aplications/ecommerce-platform/docker-compose.yaml'
+//         PROJECT_NAME     = 'ecommerce-platform'
+//     }
+
+//     options {
+//         timeout(time: 60, unit: 'MINUTES')
+//         buildDiscarder(logRotator(numToKeepStr: '10'))
+//         timestamps()
+//     }
+
+//     stages {
+
+//         stage('Checkout') {
+//             steps {
+//                 checkout scm
+//                 sh 'git log --oneline -3'
+//                 echo "✅ Checkout complete — build #${BUILD_NUMBER}"
+//             }
+//         }
+
+//         stage('Detect Changes') {
+//             steps {
+//                 script {
+//                     def changed = sh(
+//                         script: "git diff --name-only HEAD~1 HEAD 2>/dev/null || echo 'all'",
+//                         returnStdout: true
+//                     ).trim()
+
+//                     def buildAll = (
+//                         changed == 'all'  ||
+//                         changed.isEmpty() ||
+//                         currentBuild.getBuildCauses()
+//                                     .toString()
+//                                     .contains('UserIdCause')
+//                     )
+
+//                     env.BUILD_GATEWAY = (buildAll || changed.contains('api-gateway'))     ? 'true' : 'false'
+//                     env.BUILD_USER    = (buildAll || changed.contains('user-service'))    ? 'true' : 'false'
+//                     env.BUILD_PRODUCT = (buildAll || changed.contains('product-service')) ? 'true' : 'false'
+//                     env.BUILD_ORDER   = (buildAll || changed.contains('order-service'))   ? 'true' : 'false'
+
+//                     echo """
+//                     ========================================
+//                     📦 Build #${BUILD_NUMBER} — Services:
+//                        api-gateway:     ${env.BUILD_GATEWAY}
+//                        user-service:    ${env.BUILD_USER}
+//                        product-service: ${env.BUILD_PRODUCT}
+//                        order-service:   ${env.BUILD_ORDER}
+//                     ----------------------------------------
+//                        Changed files: ${changed}
+//                        Full build:    ${buildAll}
+//                        Trigger:       ${currentBuild.getBuildCauses()[0].shortDescription}
+//                     ========================================
+//                     """
+//                 }
+//             }
+//         }
+
+//         stage('Test') {
+//             parallel {
+
+//                 stage('API Gateway') {
+//                     when { expression { env.BUILD_GATEWAY == 'true' } }
+//                     steps {
+//                         sh '''
+//                             docker run --rm \
+//                                 -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/api-gateway:/app \
+//                                 -w /app node:18-alpine \
+//                                 sh -c "npm ci && npm test -- --passWithNoTests --forceExit"
+//                             echo "✅ API Gateway tests passed!"
+//                         '''
+//                     }
+//                 }
+
+//                 stage('User Service') {
+//                     when { expression { env.BUILD_USER == 'true' } }
+//                     steps {
+//                         sh '''
+//                             docker run --rm \
+//                                 -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/user-service:/app \
+//                                 -w /app maven:3.9-eclipse-temurin-17 \
+//                                 mvn test -q -Dsurefire.failIfNoSpecifiedTests=false || true
+//                             echo "✅ User Service tests passed!"
+//                         '''
+//                     }
+//                 }
+
+//                 stage('Product Service') {
+//                     when { expression { env.BUILD_PRODUCT == 'true' } }
+//                     steps {
+//                         sh '''
+//                             docker run --rm \
+//                                 -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/product-service:/app \
+//                                 -w /app -e PYTHONPATH=/app python:3.11-slim \
+//                                 sh -c "pip install -r requirements.txt pytest -q && pytest tests/ -v --tb=short || true"
+//                             echo "✅ Product Service tests passed!"
+//                         '''
+//                     }
+//                 }
+
+//                 stage('Order Service') {
+//                     when { expression { env.BUILD_ORDER == 'true' } }
+//                     steps {
+//                         sh '''
+//                             docker run --rm \
+//                                 -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/order-service:/app \
+//                                 -w /app golang:1.21-alpine \
+//                                 sh -c "go mod download && go test ./... -v"
+//                             echo "✅ Order Service tests passed!"
+//                         '''
+//                     }
+//                 }
+
+//             }
+//         }
+
+//         stage('Build & Push Images') {
+//             parallel {
+
+//                 stage('Gateway') {
+//                     when { expression { env.BUILD_GATEWAY == 'true' } }
+//                     steps {
+//                         script {
+//                             buildAndPush('api-gateway',
+//                                 "${WORKSPACE}/Aplications/ecommerce-platform/services/api-gateway")
+//                         }
+//                     }
+//                 }
+
+//                 stage('User') {
+//                     when { expression { env.BUILD_USER == 'true' } }
+//                     steps {
+//                         script {
+//                             buildAndPush('user-service',
+//                                 "${WORKSPACE}/Aplications/ecommerce-platform/services/user-service")
+//                         }
+//                     }
+//                 }
+
+//                 stage('Product') {
+//                     when { expression { env.BUILD_PRODUCT == 'true' } }
+//                     steps {
+//                         script {
+//                             buildAndPush('product-service',
+//                                 "${WORKSPACE}/Aplications/ecommerce-platform/services/product-service")
+//                         }
+//                     }
+//                 }
+
+//                 stage('Order') {
+//                     when { expression { env.BUILD_ORDER == 'true' } }
+//                     steps {
+//                         script {
+//                             buildAndPush('order-service',
+//                                 "${WORKSPACE}/Aplications/ecommerce-platform/services/order-service")
+//                         }
+//                     }
+//                 }
+
+//             }
+//         }
+
+//         stage('Deploy') {
+//             steps {
+//                 withCredentials([
+//                     string(credentialsId: 'jwt-secret',   variable: 'JWT_SECRET'),
+//                     string(credentialsId: 'db-root-pass', variable: 'DB_ROOT_PASS')
+//                 ]) {
+//                     sh '''
+//                         echo "🧹 Cleaning up ALL existing platform containers..."
+
+//                         # Stop and remove ALL containers related to this platform
+//                         # This covers: ecommerce-platform-*, deploy-*
+//                         docker ps -a --format '{{.Names}}' \
+//                             | grep -E "(ecommerce-platform|deploy-)" \
+//                             | xargs docker rm -f 2>/dev/null || true
+
+//                         # Remove orphan networks from failed deploys
+//                         docker network ls --format '{{.Name}}' \
+//                             | grep -E "(ecommerce|deploy-)" \
+//                             | xargs docker network rm 2>/dev/null || true
+
+//                         echo "📋 Containers after cleanup:"
+//                         docker ps -a | grep -E "(ecommerce|deploy-)" || echo "None — clean slate ✅"
+
+//                         echo ""
+//                         echo "📥 Pulling latest images from Docker Hub..."
+//                         docker pull santonix/api-gateway:latest
+//                         docker pull santonix/user-service:latest
+//                         docker pull santonix/product-service:latest
+//                         docker pull santonix/order-service:latest
+
+//                         echo ""
+//                         echo "🚀 Starting platform..."
+//                         JWT_SECRET=$JWT_SECRET \
+//                         DB_ROOT_PASS=$DB_ROOT_PASS \
+//                         docker-compose \
+//                             -p ecommerce-platform \
+//                             -f /home/bonny/CLAUDE/Aplications/ecommerce-platform/docker-compose.yaml \
+//                             up -d
+
+//                         echo "✅ Deployment complete!"
+//                         docker ps | grep ecommerce
+//                     '''
+//                 }
+//             }
+//         }
+
+//     }
+
+//     post {
+//         success { echo "✅ Stage 5 passed — platform deployed!" }
+//         failure { echo "❌ Stage 5 failed — check logs above" }
+//         always  { cleanWs() }
+//     }
+// }
+
+// def buildAndPush(String service, String contextPath) {
+//     withCredentials([usernamePassword(
+//         credentialsId: 'dockerhub-creds',
+//         usernameVariable: 'DOCKER_USER',
+//         passwordVariable: 'DOCKER_PASS'
+//     )]) {
+//         sh """
+//             echo "🔨 Building ${service} v${VERSION}..."
+//             TMPDIR=\$(mktemp -d /tmp/jenkins-build-XXXXXX)
+//             cp -r ${contextPath}/. \$TMPDIR/
+
+//             docker build \
+//                 -t ${DOCKER_REGISTRY}/${service}:${VERSION} \
+//                 -t ${DOCKER_REGISTRY}/${service}:latest \
+//                 \$TMPDIR/
+
+//             rm -rf \$TMPDIR
+
+//             echo "\$DOCKER_PASS" | docker login -u "\$DOCKER_USER" --password-stdin
+//             docker push ${DOCKER_REGISTRY}/${service}:${VERSION}
+//             docker push ${DOCKER_REGISTRY}/${service}:latest
+//             echo "✅ ${service} pushed!"
+//         """
+//     }
+// }
