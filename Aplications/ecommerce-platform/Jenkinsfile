@@ -67,60 +67,60 @@ pipeline {
                 stage('API Gateway') {
                     when { expression { env.BUILD_GATEWAY == 'true' } }
                     steps {
-                        sh '''
+                        sh """
                             echo "🧪 Testing API Gateway..."
-                            docker run --rm \
-                                -v "$WORKSPACE/Aplications/ecommerce-platform/services/api-gateway":/app \
-                                -w /app \
-                                node:18-alpine \
+                            docker run --rm \\
+                                -v "\$WORKSPACE/Aplications/ecommerce-platform/services/api-gateway":/app \\
+                                -w /app \\
+                                node:18-alpine \\
                                 sh -c "npm ci && npm test -- --passWithNoTests"
                             echo "✅ API Gateway tests passed!"
-                        '''
+                        """
                     }
                 }
 
                 stage('User Service') {
                     when { expression { env.BUILD_USER == 'true' } }
                     steps {
-                        sh '''
+                        sh """
                             echo "🧪 Testing User Service..."
-                            docker run --rm \
-                                -v "$WORKSPACE/Aplications/ecommerce-platform/services/user-service":/app \
-                                -w /app \
-                                maven:3.9-eclipse-temurin-17 \
+                            docker run --rm \\
+                                -v "\$WORKSPACE/Aplications/ecommerce-platform/services/user-service":/app \\
+                                -w /app \\
+                                maven:3.9-eclipse-temurin-17 \\
                                 mvn test -q -Dsurefire.failIfNoSpecifiedTests=false || true
                             echo "✅ User Service tests passed!"
-                        '''
+                        """
                     }
                 }
 
                 stage('Product Service') {
                     when { expression { env.BUILD_PRODUCT == 'true' } }
                     steps {
-                        sh '''
+                        sh """
                             echo "🧪 Testing Product Service..."
-                            docker run --rm \
-                                -v "$WORKSPACE/Aplications/ecommerce-platform/services/product-service":/app \
-                                -w /app \
-                                python:3.11-slim \
+                            docker run --rm \\
+                                -v "\$WORKSPACE/Aplications/ecommerce-platform/services/product-service":/app \\
+                                -w /app \\
+                                python:3.11-slim \\
                                 sh -c "pip install -r requirements.txt pytest -q && pytest tests/ -v --tb=short || true"
                             echo "✅ Product Service tests passed!"
-                        '''
+                        """
                     }
                 }
 
                 stage('Order Service') {
                     when { expression { env.BUILD_ORDER == 'true' } }
                     steps {
-                        sh '''
+                        sh """
                             echo "🧪 Testing Order Service..."
-                            docker run --rm \
-                                -v "$WORKSPACE/Aplications/ecommerce-platform/services/order-service":/app \
-                                -w /app \
-                                golang:1.21-alpine \
+                            docker run --rm \\
+                                -v "\$WORKSPACE/Aplications/ecommerce-platform/services/order-service":/app \\
+                                -w /app \\
+                                golang:1.21-alpine \\
                                 sh -c "go mod download && go test ./... -v"
                             echo "✅ Order Service tests passed!"
-                        '''
+                        """
                     }
                 }
 
