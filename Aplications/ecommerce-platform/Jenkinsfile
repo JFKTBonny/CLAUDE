@@ -174,19 +174,32 @@ pipeline {
                     sh '''
                         echo "🚀 Deploying ecommerce platform..."
 
-                        # Copy compose file from Jenkins workspace to /tmp (host accessible)
-                        COMPOSE_TMP=$(mktemp /tmp/docker-compose-XXXXXX.yaml)
-                        cp $WORKSPACE/Aplications/ecommerce-platform/docker-compose.yaml $COMPOSE_TMP
+                        # Copy prod compose + env files to /tmp (host accessible)
+                        DEPLOY_DIR=$(mktemp -d /tmp/deploy-XXXXXX)
 
-                        echo "📄 Using compose file: $COMPOSE_TMP"
+                        cp $WORKSPACE/Aplications/ecommerce-platform/docker-compose.prod.yaml \
+                           $DEPLOY_DIR/docker-compose.yaml
 
-                        JWT_SECRET=$JWT_SECRET \
-                        DB_ROOT_PASS=$DB_ROOT_PASS \
-                        docker-compose -f $COMPOSE_TMP up -d --remove-orphans
+                        cp $WORKSPACE/Aplications/ecommerce-platform/infrastructure/docker/init-db.sql \
+                           $DEPLOY_DIR/init-db.sql
 
-                        # Cleanup
-                        rm -f $COMPOSE_TMP
+                        # Write .env file for deployment
+                        cat > $DEPLOY_DIR/.env << ENVEOF
+JWT_SECRET=$JWT_SECRET
+DB_ROOT_PASS=$DB_ROOT_PASS
+ENVEOF
 
+                        echo "📄 Deploy dir contents:"
+                        ls -la $DEPLOY_DIR
+
+                        # Pull latest images from Docker Hub
+                        docker-compose -f $DEPLOY_DIR/docker-compose.yaml pull
+
+                        # Deploy
+                        docker-compose -f $DEPLOY_DIR/docker-compose.yaml \
+                            up -d --remove-orphans
+
+                        rm -rf $DEPLOY_DIR
                         echo "✅ Deployment complete!"
                     '''
                 }
