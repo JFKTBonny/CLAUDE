@@ -165,11 +165,38 @@ pipeline {
             }
         }
 
+        stage('Deploy') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'jwt-secret',   variable: 'JWT_SECRET'),
+                    string(credentialsId: 'db-root-pass', variable: 'DB_ROOT_PASS')
+                ]) {
+                    sh '''
+                        echo "🚀 Deploying ecommerce platform..."
+
+                        cd /home/bonny/CLAUDE/Aplications/ecommerce-platform
+
+                        # Export secrets
+                        export JWT_SECRET=$JWT_SECRET
+                        export DB_ROOT_PASS=$DB_ROOT_PASS
+
+                        # Pull latest images from Docker Hub
+                        docker compose pull || true
+
+                        # Deploy — recreate only changed containers
+                        docker compose up -d --remove-orphans
+
+                        echo "✅ Deployment complete!"
+                    '''
+                }
+            }
+        }
+
     }
 
     post {
-        success { echo "✅ Stage 4 passed — all images pushed to Docker Hub!" }
-        failure { echo "❌ Stage 4 failed — check build output above" }
+        success { echo "✅ Stage 5 passed — platform deployed!" }
+        failure { echo "❌ Stage 5 failed — check logs above" }
         always  { cleanWs() }
     }
 }
@@ -182,13 +209,8 @@ def buildAndPush(String service, String contextPath) {
     )]) {
         sh """
             echo "🔨 Building ${service} v${VERSION}..."
-
-            # Copy from Jenkins workspace to /tmp on host (shared between Jenkins container and Docker daemon)
             TMPDIR=\$(mktemp -d /tmp/jenkins-build-XXXXXX)
             cp -r ${contextPath}/. \$TMPDIR/
-
-            echo "📦 Build context: \$TMPDIR"
-            ls \$TMPDIR/
 
             docker build \
                 -t ${DOCKER_REGISTRY}/${service}:${VERSION} \
@@ -197,7 +219,6 @@ def buildAndPush(String service, String contextPath) {
 
             rm -rf \$TMPDIR
 
-            echo "📤 Pushing ${service}..."
             echo "\$DOCKER_PASS" | docker login -u "\$DOCKER_USER" --password-stdin
             docker push ${DOCKER_REGISTRY}/${service}:${VERSION}
             docker push ${DOCKER_REGISTRY}/${service}:latest
