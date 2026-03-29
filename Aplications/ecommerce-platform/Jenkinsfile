@@ -212,7 +212,7 @@ pipeline {
 
                     for (int i = 1; i <= maxRetries; i++) {
                         def code = sh(
-                            script: "curl -s -o /dev/null -w '%{http_code}' http://api-gateway:3000/health",
+                            script: "curl -s -o /dev/null -w '%{http_code}' http://api-gateway:3000/health 2>/dev/null || echo 000",
                             returnStdout: true
                         ).trim()
 
