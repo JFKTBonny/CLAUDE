@@ -190,7 +190,7 @@ pipeline {
 
                         echo "📄 Preparing deploy files..."
                         
-                        docker exec jenkins bash -c "chown -R jenkins:jenkins /home/bonny/CLAUDE/Aplications/ecommerce-platform"
+                        docker exec jenkins bash -c "chmod 777 /home/bonny/CLAUDE/Aplications/ecommerce-platform"
                         cd  /home/bonny/CLAUDE/Aplications/ecommerce-platform
                         docker-compose down --remove-orphans
                         docker-compose up -d
