@@ -227,7 +227,7 @@ ENVEOF
 
                     for (int i = 1; i <= maxRetries; i++) {
                         def status = sh(
-                            script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/health",
+                            script: "curl -s -o /dev/null -w '%{http_code}' http://$(hostname -I | awk '{print $1}'):3000/health",
                             returnStdout: true
                         ).trim()
 
