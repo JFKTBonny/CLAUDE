@@ -246,7 +246,7 @@ ENVEOF
 
                     // Run smoke tests
                     sh '''
-                        BASE_URL="http://localhost:3000"
+                        BASE_URL="http://$(hostname -I | awk '{print $1}'):3000"
                         PASS=0
                         FAIL=0
 
