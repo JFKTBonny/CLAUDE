@@ -414,10 +414,10 @@ def buildAndPush(String service, String hostContextPath) {
 //                         mkdir -p $DEPLOY_DIR/infrastructure/docker
 //                         cp /home/bonny/CLAUDE/Aplications/ecommerce-platform/infrastructure/docker/init-db.sql $DEPLOY_DIR/infrastructure/docker/init-db.sql || true
                            cp /home/bonny/CLAUDE/Aplications/ecommerce-platform/.env  $DEPLOY_DIR/.env || echo " .env file is missing ..." 
-//                         cat > $DEPLOY_DIR/.env << ENVEOF
-//                         JWT_SECRET=$JWT_SECRET
-//                         DB_ROOT_PASS=$DB_ROOT_PASS
-//                         ENVEOF
+                        // cat > $DEPLOY_DIR/.env << ENVEOF
+                        // JWT_SECRET=$JWT_SECRET
+                        // DB_ROOT_PASS=$DB_ROOT_PASS
+                        // ENVEOF
 
 //                         echo "🚀 Starting platform..."
 //                         cd $DEPLOY_DIR
