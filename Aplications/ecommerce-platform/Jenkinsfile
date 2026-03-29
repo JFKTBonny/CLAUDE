@@ -1,11 +1,11 @@
-
 pipeline {
-
-    agent any
+    agent none
 
     environment {
-        DOCKER_REGISTRY  = 'santonix'
-        VERSION          = "1.0.${BUILD_NUMBER}"
+        DOCKER_REGISTRY = 'santonix'
+        VERSION = "1.0.${BUILD_NUMBER}"
+        // Host path where Jenkins workspace lives
+        HOST_WORKSPACE = "/home/bonny/CLAUDE/Aplications/ecommerce-platform/jenkins_home/workspace/${JOB_NAME}"
     }
 
     options {
@@ -15,8 +15,8 @@ pipeline {
     }
 
     stages {
-
         stage('Checkout') {
+            agent any
             steps {
                 checkout scm
                 sh 'git log --oneline -3'
@@ -25,25 +25,24 @@ pipeline {
         }
 
         stage('Detect Changes') {
+            agent any
             steps {
                 script {
                     def changed = sh(
-                        script: "git diff --name-only HEAD~1 HEAD 2>/dev/null || echo 'all'",
+                        script: "git diff --name-only ${env.GIT_PREVIOUS_COMMIT ?: 'HEAD~1'} ${env.GIT_COMMIT} 2>/dev/null || echo 'all'",
                         returnStdout: true
                     ).trim()
 
                     def buildAll = (
-                        changed == 'all'  ||
+                        changed == 'all' ||
                         changed.isEmpty() ||
-                        currentBuild.getBuildCauses()
-                                    .toString()
-                                    .contains('UserIdCause')
+                        currentBuild.getBuildCauses().toString().contains('UserIdCause')
                     )
 
-                    env.BUILD_GATEWAY = (buildAll || changed.contains('api-gateway'))     ? 'true' : 'false'
-                    env.BUILD_USER    = (buildAll || changed.contains('user-service'))    ? 'true' : 'false'
+                    env.BUILD_GATEWAY = (buildAll || changed.contains('api-gateway')) ? 'true' : 'false'
+                    env.BUILD_USER = (buildAll || changed.contains('user-service')) ? 'true' : 'false'
                     env.BUILD_PRODUCT = (buildAll || changed.contains('product-service')) ? 'true' : 'false'
-                    env.BUILD_ORDER   = (buildAll || changed.contains('order-service'))   ? 'true' : 'false'
+                    env.BUILD_ORDER = (buildAll || changed.contains('order-service')) ? 'true' : 'false'
 
                     echo """
                     ========================================
@@ -55,132 +54,123 @@ pipeline {
                     ----------------------------------------
                        Changed files: ${changed}
                        Full build:    ${buildAll}
-                       Trigger:       ${currentBuild.getBuildCauses()[0].shortDescription}
                     ========================================
                     """
                 }
             }
         }
 
-        stage('Test') {
-            parallel {
-
-                stage('API Gateway') {
-                    when { expression { env.BUILD_GATEWAY == 'true' } }
-                    steps {
-                        sh '''
-                            docker run --rm \
-                                -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/api-gateway:/app \
-                                -w /app node:18-alpine \
-                                sh -c "npm ci && npm test -- --passWithNoTests --forceExit"
-                            echo "✅ API Gateway tests passed!"
-                        '''
-                    }
-                }
-
-                stage('User Service') {
-                    when { expression { env.BUILD_USER == 'true' } }
-                    steps {
-                        sh '''
-                            docker run --rm \
-                                -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/user-service:/app \
-                                -w /app maven:3.9-eclipse-temurin-17 \
-                                mvn test -q -Dsurefire.failIfNoSpecifiedTests=false || true
-                            echo "✅ User Service tests passed!"
-                        '''
-                    }
-                }
-
-                stage('Product Service') {
-                    when { expression { env.BUILD_PRODUCT == 'true' } }
-                    steps {
-                        sh '''
-                            docker run --rm \
-                                -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/product-service:/app \
-                                -w /app -e PYTHONPATH=/app python:3.11-slim \
-                                sh -c "pip install -r requirements.txt pytest -q && pytest tests/ -v --tb=short || true"
-                            echo "✅ Product Service tests passed!"
-                        '''
-                    }
-                }
-
-                stage('Order Service') {
-                    when { expression { env.BUILD_ORDER == 'true' } }
-                    steps {
-                        sh '''
-                            docker run --rm \
-                                -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/order-service:/app \
-                                -w /app golang:1.21-alpine \
-                                sh -c "go mod download && go test ./... -v"
-                            echo "✅ Order Service tests passed!"
-                        '''
-                    }
-                }
-
+        stage('Test API Gateway') {
+            agent any
+            when { expression { env.BUILD_GATEWAY == 'true' } }
+            steps {
+                sh '''
+                    docker run --rm \
+                        -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/api-gateway:/app \
+                        -v ${HOST_WORKSPACE}:/workspace \
+                        -w /app node:18-alpine \
+                        sh -c "npm ci && npm test -- --passWithNoTests --forceExit"
+                    echo "✅ API Gateway tests passed!"
+                '''
             }
         }
 
-        stage('Build & Push Images') {
-            parallel {
+        stage('Test User Service') {
+            agent any
+            when { expression { env.BUILD_USER == 'true' } }
+            steps {
+                sh '''
+                    docker run --rm \
+                        -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/user-service:/app \
+                        -v ${HOST_WORKSPACE}:/workspace \
+                        -w /app maven:3.9-eclipse-temurin-17 \
+                        mvn test -q -Dsurefire.failIfNoSpecifiedTests=false || true
+                    echo "✅ User Service tests passed!"
+                '''
+            }
+        }
 
-                stage('Gateway') {
-                    when { expression { env.BUILD_GATEWAY == 'true' } }
-                    steps {
-                        script {
-                            buildAndPush('api-gateway',
-                                "${WORKSPACE}/Aplications/ecommerce-platform/services/api-gateway")
-                        }
-                    }
+        stage('Test Product Service') {
+            agent any
+            when { expression { env.BUILD_PRODUCT == 'true' } }
+            steps {
+                sh '''
+                    docker run --rm \
+                        -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/product-service:/app \
+                        -v ${HOST_WORKSPACE}:/workspace \
+                        -w /app -e PYTHONPATH=/app python:3.11-slim \
+                        sh -c "pip install -r requirements.txt pytest && pytest tests/ -v --tb=short || true"
+                    echo "✅ Product Service tests passed!"
+                '''
+            }
+        }
+
+        stage('Test Order Service') {
+            agent any
+            when { expression { env.BUILD_ORDER == 'true' } }
+            steps {
+                sh '''
+                    docker run --rm \
+                        -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/order-service:/app \
+                        -v ${HOST_WORKSPACE}:/workspace \
+                        -w /app golang:1.21-alpine \
+                        sh -c "go mod download && go test ./... -v"
+                    echo "✅ Order Service tests passed!"
+                '''
+            }
+        }
+
+        stage('Build & Push Gateway') {
+            agent any
+            when { expression { env.BUILD_GATEWAY == 'true' } }
+            steps {
+                script {
+                    buildAndPush('api-gateway', '/home/bonny/CLAUDE/Aplications/ecommerce-platform/services/api-gateway')
                 }
+            }
+        }
 
-                stage('User') {
-                    when { expression { env.BUILD_USER == 'true' } }
-                    steps {
-                        script {
-                            buildAndPush('user-service',
-                                "${WORKSPACE}/Aplications/ecommerce-platform/services/user-service")
-                        }
-                    }
+        stage('Build & Push User') {
+            agent any
+            when { expression { env.BUILD_USER == 'true' } }
+            steps {
+                script {
+                    buildAndPush('user-service', '/home/bonny/CLAUDE/Aplications/ecommerce-platform/services/user-service')
                 }
+            }
+        }
 
-                stage('Product') {
-                    when { expression { env.BUILD_PRODUCT == 'true' } }
-                    steps {
-                        script {
-                            buildAndPush('product-service',
-                                "${WORKSPACE}/Aplications/ecommerce-platform/services/product-service")
-                        }
-                    }
+        stage('Build & Push Product') {
+            agent any
+            when { expression { env.BUILD_PRODUCT == 'true' } }
+            steps {
+                script {
+                    buildAndPush('product-service', '/home/bonny/CLAUDE/Aplications/ecommerce-platform/services/product-service')
                 }
+            }
+        }
 
-                stage('Order') {
-                    when { expression { env.BUILD_ORDER == 'true' } }
-                    steps {
-                        script {
-                            buildAndPush('order-service',
-                                "${WORKSPACE}/Aplications/ecommerce-platform/services/order-service")
-                        }
-                    }
+        stage('Build & Push Order') {
+            agent any
+            when { expression { env.BUILD_ORDER == 'true' } }
+            steps {
+                script {
+                    buildAndPush('order-service', '/home/bonny/CLAUDE/Aplications/ecommerce-platform/services/order-service')
                 }
-
             }
         }
 
         stage('Deploy') {
+            agent any
             steps {
                 withCredentials([
-                    string(credentialsId: 'jwt-secret',   variable: 'JWT_SECRET'),
+                    string(credentialsId: 'jwt-secret', variable: 'JWT_SECRET'),
                     string(credentialsId: 'db-root-pass', variable: 'DB_ROOT_PASS')
                 ]) {
                     sh '''
                         echo "🧹 Cleaning up existing platform containers..."
-                        docker ps -a --format '{{.Names}}' \
-                            | grep -E "(ecommerce-platform|deploy-)" \
-                            | xargs docker rm -f 2>/dev/null || true
-
-                        docker network ls --format '{{.Name}}' \
-                            | grep -E "(ecommerce|deploy-)" \
-                            | xargs docker network rm 2>/dev/null || true
+                        docker ps -a --format "{{.Names}}" | grep -E "(ecommerce-platform|deploy-)" | xargs docker rm -f 2>/dev/null || true
+                        docker network ls --format "{{.Name}}" | grep -E "(ecommerce|deploy-)" | xargs docker network rm 2>/dev/null || true
 
                         echo "📥 Pulling latest images..."
                         docker pull santonix/api-gateway:latest
@@ -190,26 +180,19 @@ pipeline {
 
                         echo "📄 Preparing deploy files..."
                         DEPLOY_DIR=$(mktemp -d /tmp/deploy-XXXXXX)
-
-                        cp /home/bonny/CLAUDE/Aplications/ecommerce-platform/docker-compose.yaml \
-                           $DEPLOY_DIR/docker-compose.yaml
-
+                        cp /home/bonny/CLAUDE/Aplications/ecommerce-platform/docker-compose.yaml $DEPLOY_DIR/docker-compose.yaml
                         mkdir -p $DEPLOY_DIR/infrastructure/docker
-                        cp /home/bonny/CLAUDE/Aplications/ecommerce-platform/infrastructure/docker/init-db.sql \
-                           $DEPLOY_DIR/infrastructure/docker/init-db.sql
+                        cp /home/bonny/CLAUDE/Aplications/ecommerce-platform/infrastructure/docker/init-db.sql $DEPLOY_DIR/infrastructure/docker/init-db.sql
 
                         cat > $DEPLOY_DIR/.env << ENVEOF
-JWT_SECRET=$JWT_SECRET
-DB_ROOT_PASS=$DB_ROOT_PASS
-ENVEOF
+                        JWT_SECRET=$JWT_SECRET
+                        DB_ROOT_PASS=$DB_ROOT_PASS
+                        ENVEOF
 
                         echo "🚀 Starting platform..."
-                        docker-compose \
-                            -p ecommerce-platform \
-                            -f $DEPLOY_DIR/docker-compose.yaml \
-                            up -d
-                        sleep 30    
-                        docker-compose ps 
+                        docker-compose -p ecommerce-platform -f $DEPLOY_DIR/docker-compose.yaml up -d
+                        sleep 30
+                        docker-compose -p ecommerce-platform ps
                         rm -rf $DEPLOY_DIR
                         echo "✅ Deployment triggered!"
                     '''
@@ -218,9 +201,9 @@ ENVEOF
         }
 
         stage('Smoke Test') {
+            agent any
             steps {
                 script {
-                    // Wait for gateway with retry
                     def maxRetries = 24
                     def wait = 5
                     def ready = false
@@ -229,7 +212,7 @@ ENVEOF
 
                     for (int i = 1; i <= maxRetries; i++) {
                         def status = sh(
-                            script: "curl -s -o /dev/null -w '%{http_code}' http://api-gateway:3000/health",
+                            script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/health || echo '000'",
                             returnStdout: true
                         ).trim()
 
@@ -246,15 +229,14 @@ ENVEOF
                         error("❌ Gateway not ready after ${maxRetries * wait}s")
                     }
 
-                    // Run smoke tests
                     sh '''
-                        BASE_URL="http://api-gateway:3000"
+                        BASE_URL="http://localhost:3000"
                         PASS=0
                         FAIL=0
 
                         # Test 1: Gateway health
                         echo "🧪 Test 1: Gateway health..."
-                        HEALTH=$(curl -s $BASE_URL/health)
+                        HEALTH=$(curl -s $BASE_URL/health || echo "DOWN")
                         if echo $HEALTH | grep -q "UP"; then
                             echo "  ✅ Gateway is UP"
                             PASS=$((PASS+1))
@@ -263,9 +245,9 @@ ENVEOF
                             FAIL=$((FAIL+1))
                         fi
 
-                        # Test 2: Auth enforcement
+                        # Test 2: Auth enforcement  
                         echo "🧪 Test 2: Auth enforcement..."
-                        CODE=$(curl -s -o /dev/null -w "%{http_code}" $BASE_URL/api/products)
+                        CODE=$(curl -s -o /dev/null -w "%{http_code}" $BASE_URL/api/products || echo "000")
                         if [ "$CODE" = "401" ]; then
                             echo "  ✅ Auth enforced (401)"
                             PASS=$((PASS+1))
@@ -279,7 +261,7 @@ ENVEOF
                         curl -s -X POST $BASE_URL/api/users/register \
                             -H "Content-Type: application/json" \
                             -d '{"email":"smoketest@ci.com","password":"smokepass123","firstName":"Smoke","lastName":"Test"}' \
-                            > /dev/null 2>&1
+                            > /dev/null 2>&1 || true
                         echo "  ✅ Registration attempted"
                         PASS=$((PASS+1))
 
@@ -287,20 +269,20 @@ ENVEOF
                         echo "🧪 Test 4: Login..."
                         LOGIN=$(curl -s -X POST $BASE_URL/api/users/login \
                             -H "Content-Type: application/json" \
-                            -d '{"email":"smoketest@ci.com","password":"smokepass123"}')
-                        TOKEN=$(echo $LOGIN | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('token',''))" 2>/dev/null || echo "")
+                            -d '{"email":"smoketest@ci.com","password":"smokepass123"}' || echo "{}")
+                        TOKEN=$(echo $LOGIN | python3 -c "import sys,json;print(json.load(sys.stdin).get('token','') if sys.stdin.read().strip() else ''" 2>/dev/null || echo "")
                         if [ -n "$TOKEN" ]; then
                             echo "  ✅ Token generated"
                             PASS=$((PASS+1))
                         else
-                            echo "  ❌ Login failed: $LOGIN"
+                            echo "  ❌ Login failed"
                             FAIL=$((FAIL+1))
                         fi
 
                         # Test 5: Products endpoint
                         echo "🧪 Test 5: Products endpoint..."
                         CODE=$(curl -s -o /dev/null -w "%{http_code}" $BASE_URL/api/products \
-                            -H "Authorization: Bearer $TOKEN")
+                            -H "Authorization: Bearer $TOKEN" || echo "000")
                         if [ "$CODE" = "200" ]; then
                             echo "  ✅ Products responding (200)"
                             PASS=$((PASS+1))
@@ -312,7 +294,7 @@ ENVEOF
                         # Test 6: Orders endpoint
                         echo "🧪 Test 6: Orders endpoint..."
                         CODE=$(curl -s -o /dev/null -w "%{http_code}" $BASE_URL/api/orders \
-                            -H "Authorization: Bearer $TOKEN")
+                            -H "Authorization: Bearer $TOKEN" || echo "000")
                         if [ "$CODE" = "200" ]; then
                             echo "  ✅ Orders responding (200)"
                             PASS=$((PASS+1))
@@ -321,7 +303,6 @@ ENVEOF
                             FAIL=$((FAIL+1))
                         fi
 
-                        # Summary
                         echo ""
                         echo "========================================"
                         echo "  Smoke Test Results"
@@ -339,7 +320,6 @@ ENVEOF
                 }
             }
         }
-
     }
 
     post {
@@ -355,28 +335,28 @@ ENVEOF
     }
 }
 
-def buildAndPush(String service, String contextPath) {
+def buildAndPush(String service, String hostContextPath) {
     withCredentials([usernamePassword(
         credentialsId: 'dockerhub-creds',
         usernameVariable: 'DOCKER_USER',
         passwordVariable: 'DOCKER_PASS'
     )]) {
         sh """
-            echo "🔨 Building ${service} v${VERSION}..."
+            echo "🔨 Building \${service} v\${VERSION}..."
             TMPDIR=\$(mktemp -d /tmp/jenkins-build-XXXXXX)
-            cp -r ${contextPath}/. \$TMPDIR/
+            cp -r \${hostContextPath}/. \$TMPDIR/
 
             docker build \
-                -t ${DOCKER_REGISTRY}/${service}:${VERSION} \
-                -t ${DOCKER_REGISTRY}/${service}:latest \
+                -t \${DOCKER_REGISTRY}/\${service}:\${VERSION} \
+                -t \${DOCKER_REGISTRY}/\${service}:latest \
                 \$TMPDIR/
 
-            rm -rf \$TMPDIR
+            rm -rf \$TMPDIR/
 
             echo "\$DOCKER_PASS" | docker login -u "\$DOCKER_USER" --password-stdin
-            docker push ${DOCKER_REGISTRY}/${service}:${VERSION}
-            docker push ${DOCKER_REGISTRY}/${service}:latest
-            echo "✅ ${service} pushed!"
+            docker push \${DOCKER_REGISTRY}/\${service}:\${VERSION}
+            docker push \${DOCKER_REGISTRY}/\${service}:latest
+            echo "✅ \${service} pushed!"
         """
     }
 }
