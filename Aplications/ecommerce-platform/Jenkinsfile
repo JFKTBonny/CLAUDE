@@ -217,104 +217,124 @@ ENVEOF
 
         stage('Smoke Test') {
             steps {
-                sh '''
-                    echo "⏳ Waiting for services to be ready..."
-                    sleep 40
+                script {
+                    // Wait for gateway with retry
+                    def maxRetries = 24
+                    def wait = 5
+                    def ready = false
 
-                    BASE_URL="http://localhost:3000"
-                    PASS=0
-                    FAIL=0
+                    echo "⏳ Waiting for gateway to be ready (max ${maxRetries * wait}s)..."
 
-                    # ── Test 1: Gateway health ─────────────────────
-                    echo "🧪 Test 1: Gateway health..."
-                    HEALTH=$(curl -s $BASE_URL/health 2>/dev/null)
-                    if echo $HEALTH | grep -q '"UP"'; then
-                        echo "  ✅ Gateway is UP"
+                    for (int i = 1; i <= maxRetries; i++) {
+                        def status = sh(
+                            script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/health",
+                            returnStdout: true
+                        ).trim()
+
+                        if (status == '200') {
+                            echo "✅ Gateway ready after ${i * wait}s"
+                            ready = true
+                            break
+                        }
+                        echo "  ⏳ Attempt ${i}/${maxRetries} — HTTP ${status} — retrying in ${wait}s..."
+                        sleep wait
+                    }
+
+                    if (!ready) {
+                        error("❌ Gateway not ready after ${maxRetries * wait}s")
+                    }
+
+                    // Run smoke tests
+                    sh '''
+                        BASE_URL="http://localhost:3000"
+                        PASS=0
+                        FAIL=0
+
+                        # Test 1: Gateway health
+                        echo "🧪 Test 1: Gateway health..."
+                        HEALTH=$(curl -s $BASE_URL/health)
+                        if echo $HEALTH | grep -q "UP"; then
+                            echo "  ✅ Gateway is UP"
+                            PASS=$((PASS+1))
+                        else
+                            echo "  ❌ Gateway health failed"
+                            FAIL=$((FAIL+1))
+                        fi
+
+                        # Test 2: Auth enforcement
+                        echo "🧪 Test 2: Auth enforcement..."
+                        CODE=$(curl -s -o /dev/null -w "%{http_code}" $BASE_URL/api/products)
+                        if [ "$CODE" = "401" ]; then
+                            echo "  ✅ Auth enforced (401)"
+                            PASS=$((PASS+1))
+                        else
+                            echo "  ❌ Expected 401 got $CODE"
+                            FAIL=$((FAIL+1))
+                        fi
+
+                        # Test 3: Register smoke test user
+                        echo "🧪 Test 3: User registration..."
+                        curl -s -X POST $BASE_URL/api/users/register \
+                            -H "Content-Type: application/json" \
+                            -d '{"email":"smoketest@ci.com","password":"smokepass123","firstName":"Smoke","lastName":"Test"}' \
+                            > /dev/null 2>&1
+                        echo "  ✅ Registration attempted"
                         PASS=$((PASS+1))
-                    else
-                        echo "  ❌ Gateway health failed"
-                        FAIL=$((FAIL+1))
-                    fi
 
-                    # ── Test 2: Auth enforcement ───────────────────
-                    echo "🧪 Test 2: Auth enforcement..."
-                    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" $BASE_URL/api/products)
-                    if [ "$HTTP_CODE" = "401" ]; then
-                        echo "  ✅ Auth enforced (401)"
-                        PASS=$((PASS+1))
-                    else
-                        echo "  ❌ Expected 401 got $HTTP_CODE"
-                        FAIL=$((FAIL+1))
-                    fi
+                        # Test 4: Login
+                        echo "🧪 Test 4: Login..."
+                        LOGIN=$(curl -s -X POST $BASE_URL/api/users/login \
+                            -H "Content-Type: application/json" \
+                            -d '{"email":"smoketest@ci.com","password":"smokepass123"}')
+                        TOKEN=$(echo $LOGIN | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('token',''))" 2>/dev/null || echo "")
+                        if [ -n "$TOKEN" ]; then
+                            echo "  ✅ Token generated"
+                            PASS=$((PASS+1))
+                        else
+                            echo "  ❌ Login failed: $LOGIN"
+                            FAIL=$((FAIL+1))
+                        fi
 
-                    # ── Test 3: User registration ──────────────────
-                    echo "🧪 Test 3: User registration..."
-                    REG=$(curl -sf -X POST $BASE_URL/api/users/register \
-                        -H "Content-Type: application/json" \
-                        -d '{"email":"smoketest@ci.com","password":"smokepass123","firstName":"Smoke","lastName":"Test"}' \
-                        2>/dev/null)
-                    if echo $REG | grep -q '"email"'; then
-                        echo "  ✅ Registration successful"
-                        PASS=$((PASS+1))
-                    else
-                        echo "  ⚠️  Registration skipped (user may exist)"
-                        PASS=$((PASS+1))
-                    fi
+                        # Test 5: Products endpoint
+                        echo "🧪 Test 5: Products endpoint..."
+                        CODE=$(curl -s -o /dev/null -w "%{http_code}" $BASE_URL/api/products \
+                            -H "Authorization: Bearer $TOKEN")
+                        if [ "$CODE" = "200" ]; then
+                            echo "  ✅ Products responding (200)"
+                            PASS=$((PASS+1))
+                        else
+                            echo "  ❌ Products failed: HTTP $CODE"
+                            FAIL=$((FAIL+1))
+                        fi
 
-                    # ── Test 4: Login & token ──────────────────────
-                    echo "🧪 Test 4: Login and token generation..."
-                    LOGIN=$(curl -sf -X POST $BASE_URL/api/users/login \
-                        -H "Content-Type: application/json" \
-                        -d '{"email":"smoketest@ci.com","password":"smokepass123"}' \
-                        2>/dev/null)
-                    TOKEN=$(echo $LOGIN | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
-                    if [ -n "$TOKEN" ]; then
-                        echo "  ✅ Token generated"
-                        PASS=$((PASS+1))
-                    else
-                        echo "  ❌ Login failed — no token"
-                        FAIL=$((FAIL+1))
-                    fi
+                        # Test 6: Orders endpoint
+                        echo "🧪 Test 6: Orders endpoint..."
+                        CODE=$(curl -s -o /dev/null -w "%{http_code}" $BASE_URL/api/orders \
+                            -H "Authorization: Bearer $TOKEN")
+                        if [ "$CODE" = "200" ]; then
+                            echo "  ✅ Orders responding (200)"
+                            PASS=$((PASS+1))
+                        else
+                            echo "  ❌ Orders failed: HTTP $CODE"
+                            FAIL=$((FAIL+1))
+                        fi
 
-                    # ── Test 5: Product service ────────────────────
-                    echo "🧪 Test 5: Product service..."
-                    PROD=$(curl -sf $BASE_URL/api/products \
-                        -H "Authorization: Bearer $TOKEN" 2>/dev/null)
-                    if echo $PROD | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
-                        echo "  ✅ Product service responding"
-                        PASS=$((PASS+1))
-                    else
-                        echo "  ❌ Product service failed"
-                        FAIL=$((FAIL+1))
-                    fi
+                        # Summary
+                        echo ""
+                        echo "========================================"
+                        echo "  Smoke Test Results"
+                        echo "  ✅ Passed: $PASS / 6"
+                        echo "  ❌ Failed: $FAIL / 6"
+                        echo "========================================"
 
-                    # ── Test 6: Order service ──────────────────────
-                    echo "🧪 Test 6: Order service..."
-                    ORD=$(curl -sf $BASE_URL/api/orders \
-                        -H "Authorization: Bearer $TOKEN" 2>/dev/null)
-                    if echo $ORD | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
-                        echo "  ✅ Order service responding"
-                        PASS=$((PASS+1))
-                    else
-                        echo "  ❌ Order service failed"
-                        FAIL=$((FAIL+1))
-                    fi
+                        if [ $FAIL -gt 0 ]; then
+                            echo "❌ Smoke tests FAILED"
+                            exit 1
+                        fi
 
-                    # ── Summary ────────────────────────────────────
-                    echo ""
-                    echo "========================================"
-                    echo "  Smoke Test Results"
-                    echo "  ✅ Passed: $PASS"
-                    echo "  ❌ Failed: $FAIL"
-                    echo "========================================"
-
-                    if [ $FAIL -gt 0 ]; then
-                        echo "❌ Smoke tests FAILED — rolling back not yet automated"
-                        exit 1
-                    fi
-
-                    echo "🎉 All smoke tests passed!"
-                '''
+                        echo "🎉 All smoke tests passed!"
+                    '''
+                }
             }
         }
 
