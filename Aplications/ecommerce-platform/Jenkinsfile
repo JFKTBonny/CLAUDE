@@ -226,7 +226,7 @@ pipeline {
 
                     for (int i = 1; i <= maxRetries; i++) {
                         def status = sh(
-                            script: "curl -s -o /dev/null -w '%{http_code}' http://host.docker.internal:3000/health",
+                            script: "curl -s -o /dev/null -w '%{http_code}' http://api-gateway:3000/health",
                             returnStdout: true
                         ).trim()
 
@@ -245,7 +245,7 @@ pipeline {
 
                     // Run smoke tests
                     sh '''
-                        BASE_URL="http://host.docker.internal:3000"
+                        BASE_URL="http://api-gateway:3000"
                         PASS=0
                         FAIL=0
 
