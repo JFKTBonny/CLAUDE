@@ -234,6 +234,18 @@ pipeline {
                         PASS=0
                         FAIL=0
 
+                        # Wait for user-service to be ready
+                        echo "⏳ Waiting for user-service..."
+                        for i in $(seq 1 20); do
+                            CODE=$(curl -s -o /dev/null -w "%{http_code}" http://user-service:8081/api/users/health 2>/dev/null || echo "000")
+                            if [ "$CODE" = "200" ]; then
+                                echo "✅ User service ready after $((i * 3))s"
+                                break
+                            fi
+                            echo "  ⏳ user-service not ready ($CODE) — waiting 3s..."
+                            sleep 3
+                        done
+
                         # Test 1: Gateway health
                         echo "🧪 Test 1: Gateway health..."
                         HEALTH=$(curl -s $BASE_URL/health)
