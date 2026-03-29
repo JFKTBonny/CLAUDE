@@ -152,70 +152,48 @@ pipeline {
                     string(credentialsId: 'jwt-secret', variable: 'JWT_SECRET'),
                     string(credentialsId: 'db-root-pass', variable: 'DB_ROOT_PASS')
                 ]) {
-                    sh '''
-                        # Complete cleanup
-                        docker ps -a --format "{{.Names}}" | grep -E "(ecommerce-platform|deploy-)" | xargs docker rm -f 2>/dev/null || true
-                        docker network ls --format "{{.Name}}" | grep -E "(ecommerce|deploy-)" | xargs docker network rm 2>/dev/null || true
-
-                        # Pull images with fallbacks
-                        echo "📥 Pulling images..."
-                        docker pull santonix/api-gateway:latest || echo "⚠️ Gateway image missing - will fail"
-                        docker pull santonix/user-service:latest || echo "⚠️ User image missing - will fail"
-                        docker pull santonix/product-service:latest || echo "⚠️ Product image missing - will fail"
-                        docker pull santonix/order-service:latest || echo "⚠️ Order image missing - will fail"
-
+                    sh """
+                        echo "🚀 Deploying to Host..."
                         
-                        # Deploy with detailed output
-                        docker exec -it jenkins bash  && chmod 777 /home/bonny/CLAUDE/Aplications/ecommerce-platform
-                        cd /home/bonny/CLAUDE/Aplications/ecommerce-platform
-                        docker-compose down -v --remove-orphans
-                        docker-compose   up -d  
-                        sleep 15
+                        cd ${PROJECT_ROOT}
                         
-                        echo "=== STATUS ==="
-                        docker-compose -p ecommerce-platform ps
-                        echo "=== GATEWAY LOGS ==="
-                        docker-compose -p ecommerce-platform logs --tail=20 api-gateway || true
-                        echo "✅ Deployment complete!"
-                    '''
+                        # Create .env so compose can use it
+                        echo "JWT_SECRET=\${JWT_SECRET}" > .env
+                        echo "DB_ROOT_PASS=\${DB_ROOT_PASS}" >> .env
+
+                        # Standard deploy flow
+                        docker-compose down --remove-orphans
+                        docker-compose up -d  
+                        
+                        sleep 5
+                        docker-compose ps
+                    """
                 }
             }
         }
 
         stage('Health Check') {
             steps {
-                script {
-                    // Just verify containers are up - skip complex HTTP checks
-                    def status = sh(
-                        script: '''
-                            echo "=== CONTAINERS ==="
-                            docker ps --format "table {{.Names}}\\t{{.Status}}" | grep ecommerce-platform || echo "NO CONTAINERS"
-                            docker-compose -p ecommerce-platform ps
-                            echo "=== GATEWAY LOGS ==="
-                            docker-compose -p ecommerce-platform logs api-gateway --tail=10 || true
-                        ''', 
-                        returnStdout: false
-                    )
-                    echo "✅ Deployment successful! Check logs above."
-                }
+                sh """
+                    cd ${PROJECT_ROOT}
+                    echo "=== CURRENT STATUS ==="
+                    docker-compose ps
+                """
             }
         }
     }
 
     post {
         success { 
-            echo "🎉 SUCCESS — v${VERSION} deployed!" 
+            echo "🎉 SUCCESS — v${VERSION} is running on the host!" 
+            // Only clean the workspace, NOT the running containers
             cleanWs()
         }
         failure { 
             echo "💥 FAILED — build #${BUILD_NUMBER}" 
+            // In case of failure, you MIGHT want to clean up, but usually better to leave them for debugging
         }
-        always { 
-            sh '''
-                docker ps -a --format "{{.Names}}" | grep -E "(ecommerce-platform|deploy-)" | xargs docker rm -f 2>/dev/null || true
-                docker network ls --format "{{.Name}}" | grep -E "(ecommerce|deploy-)" | xargs docker network rm 2>/dev/null || true
-            '''
-        }
+        // REMOVED: The 'always' block that was deleting your containers
     }
 }
 
