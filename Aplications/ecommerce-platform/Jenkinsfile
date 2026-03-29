@@ -189,28 +189,36 @@ pipeline {
                         docker pull santonix/order-service:latest
 
                         echo "📄 Preparing deploy files..."
-                        DEPLOY_DIR=$(mktemp -d /tmp/deploy-XXXXXX)
-
-                        cp /home/bonny/CLAUDE/Aplications/ecommerce-platform/docker-compose.yaml \
-                           $DEPLOY_DIR/docker-compose.yaml
-
-                        mkdir -p $DEPLOY_DIR/infrastructure/docker
-                        cp /home/bonny/CLAUDE/Aplications/ecommerce-platform/infrastructure/docker/init-db.sql \
-                           $DEPLOY_DIR/infrastructure/docker/init-db.sql
-
-                        cat > $DEPLOY_DIR/.env << ENVEOF
-JWT_SECRET=$JWT_SECRET
-DB_ROOT_PASS=$DB_ROOT_PASS
-ENVEOF
-
-                        echo "🚀 Starting platform..."
-                        docker-compose \
-                            -p ecommerce-platform \
-                            -f $DEPLOY_DIR/docker-compose.yaml \
-                            up -d
-
-                        rm -rf $DEPLOY_DIR
+                        
+                        docker exec -it jenkins bash -c "chown -R  jenkins:jenkins /home/bonny/CLAUDE/Aplications/ecommerce-platform"
+                        cd  /home/bonny/CLAUDE/Aplications/ecommerce-platform
+                        docker-compose down --remove-orphans
+                        docker-compose up -d
+                        sleep 20
                         echo "✅ Deployment triggered!"
+                    '''
+                        
+                        
+                        
+
+                        
+
+                        
+
+                        
+                }
+            }
+        }
+        
+
+        stage('Health Check') {
+            steps {
+                script {
+                    sh '''
+                        echo "=== CONTAINERS ==="
+                        docker ps --format "table {{.Names}}\\t{{.Status}}" | grep ecommerce-platform || echo "NO CONTAINERS"
+                        cd /home/bonny/CLAUDE/Aplications/ecommerce-platform
+                        docker-compose ps
                     '''
                 }
             }
