@@ -158,6 +158,7 @@ pipeline {
 
                         # Setup deploy directory
                         DEPLOY_DIR=$(mktemp -d /tmp/deploy-XXXXXX)
+                        rm -rf $DEPLOY_DIR/*
                         cp /home/bonny/CLAUDE/Aplications/ecommerce-platform/docker-compose.yaml $DEPLOY_DIR/docker-compose.yaml || { echo "❌ docker-compose.yaml missing!"; exit 1; }
                         mkdir -p $DEPLOY_DIR/infrastructure/docker
                         cp /home/bonny/CLAUDE/Aplications/ecommerce-platform/infrastructure/docker/init-db.sql $DEPLOY_DIR/infrastructure/docker/ || true
