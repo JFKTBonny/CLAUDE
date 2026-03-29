@@ -398,35 +398,41 @@ def buildAndPush(String service, String hostContextPath) {
 //                     string(credentialsId: 'db-root-pass', variable: 'DB_ROOT_PASS')
 //                 ]) {
 //                     sh '''
-//                         echo "🧹 Cleaning up existing platform containers..."
-//                         docker ps -a --format "{{.Names}}" | grep -E "(ecommerce-platform|deploy-)" | xargs docker rm -f 2>/dev/null || true
-//                         docker network ls --format "{{.Name}}" | grep -E "(ecommerce|deploy-)" | xargs docker network rm 2>/dev/null || true
+                        echo "🧹 Cleaning up existing platform containers..."
+                        docker ps -a --format "{{.Names}}" | grep -E "(ecommerce-platform|deploy-)" | xargs docker rm -f 2>/dev/null || true
+                        
+                        # Use # for comments inside sh blocks, not //
+                        echo "📥 Pulling latest images..."
+                        docker pull santonix/api-gateway:latest || echo "Gateway not found"
+                        docker pull santonix/user-service:latest || echo "User not found"
 
-//                         echo "📥 Pulling latest images..."
-//                         docker pull santonix/api-gateway:latest || echo "Gateway not found, skipping"
-//                         docker pull santonix/user-service:latest || echo "User not found, skipping"
-//                         docker pull santonix/product-service:latest || echo "Product not found, skipping"
-//                         docker pull santonix/order-service:latest || echo "Order not found, skipping"
+                        echo "📄 Preparing deploy files..."
+                        # IMPORTANT: Since we are in a container, we use the workspace instead of /tmp
+                        # to ensure the Docker Host can see the files.
+                        DEPLOY_DIR="${WORKSPACE}/deploy-temp"
+                        mkdir -p $DEPLOY_DIR/infrastructure/docker
 
-//                         echo "📄 Preparing deploy files..."
-//                         DEPLOY_DIR=$(mktemp -d /tmp/deploy-XXXXXX)
-//                         cp /home/bonny/CLAUDE/Aplications/ecommerce-platform/docker-compose.yaml $DEPLOY_DIR/docker-compose.yaml || echo "docker-compose.yaml missing"
-//                         mkdir -p $DEPLOY_DIR/infrastructure/docker
-//                         cp /home/bonny/CLAUDE/Aplications/ecommerce-platform/infrastructure/docker/init-db.sql $DEPLOY_DIR/infrastructure/docker/init-db.sql || true
-                           cp /home/bonny/CLAUDE/Aplications/ecommerce-platform/.env  $DEPLOY_DIR/.env || echo " .env file is missing ..." 
-                        // cat > $DEPLOY_DIR/.env << ENVEOF
-                        // JWT_SECRET=$JWT_SECRET
-                        // DB_ROOT_PASS=$DB_ROOT_PASS
-                        // ENVEOF
+                        # Copy files using the Jenkins WORKSPACE variable (more reliable)
+                        cp ${WORKSPACE}/docker-compose.yaml $DEPLOY_DIR/docker-compose.yaml || echo "docker-compose.yaml missing"
+                        cp ${WORKSPACE}/infrastructure/docker/init-db.sql $DEPLOY_DIR/infrastructure/docker/init-db.sql || true
+                        
+                        # Fix for your .env line:
+                        cp /home/bonny/CLAUDE/Aplications/ecommerce-platform/.env $DEPLOY_DIR/.env || echo ".env file missing"
 
-//                         echo "🚀 Starting platform..."
-//                         cd $DEPLOY_DIR
-//                         docker-compose -p ecommerce-platform up -d
-//                         sleep 30
-//                         docker-compose -p ecommerce-platform ps
-//                         rm -rf $DEPLOY_DIR
-//                         echo "✅ Deployment complete!"
-//                     '''
+                        # Append the secrets to the .env file so they are actually used
+                        echo "JWT_SECRET=${JWT_SECRET}" >> $DEPLOY_DIR/.env
+                        echo "DB_ROOT_PASS=${DB_ROOT_PASS}" >> $DEPLOY_DIR/.env
+
+                        echo "🚀 Starting platform..."
+                        cd $DEPLOY_DIR
+                        
+                        # We use the full path on the HOST so the Docker Engine finds the file
+                        docker-compose -p ecommerce-platform -f $DEPLOY_DIR/docker-compose.yaml up -d
+                        
+                        sleep 10
+                        docker ps | grep ecommerce
+                        echo "✅ Deployment complete!"
+                    '''
 //                 }
 //             }
 //         }
