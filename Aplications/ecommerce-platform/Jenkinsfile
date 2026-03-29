@@ -356,9 +356,9 @@ pipeline {
         failure {
             echo "💥 PIPELINE FAILED — check logs for build #${BUILD_NUMBER}"
         }
-        always {
-            cleanWs()
-        }
+        // always {
+        //     cleanWs()
+        // }
     }
 }
 
