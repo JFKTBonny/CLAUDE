@@ -208,7 +208,8 @@ ENVEOF
                             -p ecommerce-platform \
                             -f $DEPLOY_DIR/docker-compose.yaml \
                             up -d
-
+                        sleep 30    
+                        docker-compose ps 
                         rm -rf $DEPLOY_DIR
                         echo "✅ Deployment triggered!"
                     '''
