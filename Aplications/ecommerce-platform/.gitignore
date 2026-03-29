@@ -17,8 +17,8 @@ coverage/
 vendor/
 
 # Environment
-.env
-Aplications/ecommerce-platform/.env
+# .env
+# Aplications/ecommerce-platform/.env
 
 # Docker
 *.log
