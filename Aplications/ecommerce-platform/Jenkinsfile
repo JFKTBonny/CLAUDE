@@ -164,26 +164,12 @@ pipeline {
                         docker pull santonix/product-service:latest || echo "⚠️ Product image missing - will fail"
                         docker pull santonix/order-service:latest || echo "⚠️ Order image missing - will fail"
 
-                        # Setup deploy directory
-                        DEPLOY_DIR=$(mktemp -d /tmp/deploy-XXXXXX)
-                        rm -rf $DEPLOY_DIR/*
-                        cp /home/bonny/CLAUDE/Aplications/ecommerce-platform/docker-compose.yaml $DEPLOY_DIR/docker-compose.yaml || { echo "❌ docker-compose.yaml missing!"; exit 1; }
-                        mkdir -p $DEPLOY_DIR/infrastructure/docker
-                        cp /home/bonny/CLAUDE/Aplications/ecommerce-platform/infrastructure/docker/init-db.sql $DEPLOY_DIR/infrastructure/docker/ || true
-                        cp /home/bonny/CLAUDE/Aplications/ecommerce-platform/.env $DEPLOY_DIR/.env || echo ".env file missing" 
-                        // cat > $DEPLOY_DIR/.env << ENVEOF
-                        // JWT_SECRET=$JWT_SECRET
-                        // DB_ROOT_PASS=$DB_ROOT_PASS
-                        // DB_HOST=mysql
-                        // DB_PORT=3306
-                        // DB_NAME=ecommerce
-                        // ENVEOF
-
-                        cd $DEPLOY_DIR
-                        echo "🚀 Starting deployment..."
                         
                         # Deploy with detailed output
-                        docker-compose -p ecommerce-platform up -d --force-recreate --remove-orphans
+                        docker exec -it jenkins bash  && chmod 777 /home/bonny/CLAUDE/Aplications/ecommerce-platform
+                        cd /home/bonny/CLAUDE/Aplications/ecommerce-platform
+                        docker-compose down -v --remove-orphans
+                        docker-compose up -d -f docker-compose.prod.yaml   
                         sleep 15
                         
                         echo "=== STATUS ==="
