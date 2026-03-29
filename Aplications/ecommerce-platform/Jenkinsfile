@@ -173,7 +173,7 @@ pipeline {
                     string(credentialsId: 'db-root-pass', variable: 'DB_ROOT_PASS')
                 ]) {
                     sh '''
-                        docker exec jenkins chmod -R 777 /home/bonny/CLAUDE/Aplications/ecommerce-platform
+                        
 
                         cd /home/bonny/CLAUDE/Aplications/ecommerce-platform
 
@@ -183,10 +183,10 @@ pipeline {
                         sleep 15
 
                         echo "=== STATUS ==="
-                        docker-compose -p ecommerce-platform ps
+                        docker-compose -p  ps
 
                         echo "=== GATEWAY LOGS ==="
-                        docker-compose -p ecommerce-platform logs --tail=20 api-gateway || true
+                        docker-compose  logs --tail=20 api-gateway || true
 
                         echo "✅ Deployment complete!"
                         '''
