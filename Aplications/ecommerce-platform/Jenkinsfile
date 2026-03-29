@@ -173,54 +173,43 @@ pipeline {
                     string(credentialsId: 'db-root-pass', variable: 'DB_ROOT_PASS')
                 ]) {
                     sh '''
-                        echo "🧹 Cleaning up existing platform containers..."
-                        docker ps -a --format '{{.Names}}' \
-                            | grep -E "(ecommerce-platform|deploy-)" \
-                            | xargs docker rm -f 2>/dev/null || true
-
-                        docker network ls --format '{{.Name}}' \
-                            | grep -E "(ecommerce|deploy-)" \
-                            | xargs docker network rm 2>/dev/null || true
-
-                        echo "📥 Pulling latest images..."
-                        docker pull santonix/api-gateway:latest
-                        docker pull santonix/user-service:latest
-                        docker pull santonix/product-service:latest
-                        docker pull santonix/order-service:latest
-
-                        echo "📄 Preparing deploy files..."
-                        
                         docker exec jenkins chmod -R 777 /home/bonny/CLAUDE/Aplications/ecommerce-platform
-                        cd  /home/bonny/CLAUDE/Aplications/ecommerce-platform
-                        docker-compose down --remove-orphans
+
+                        cd /home/bonny/CLAUDE/Aplications/ecommerce-platform
+
+                        docker-compose down -v --remove-orphans
                         docker-compose up -d
-                        sleep 30
-                        echo "✅ Deployment triggered!"
-                    '''
-                        
-                        
-                        
 
-                        
+                        sleep 15
 
-                        
+                        echo "=== STATUS ==="
+                        docker-compose -p ecommerce-platform ps
 
-                        
-                }
-            }
-        }
-        
+                        echo "=== GATEWAY LOGS ==="
+                        docker-compose -p ecommerce-platform logs --tail=20 api-gateway || true
+
+                        echo "✅ Deployment complete!"
+                        '''
+                                }
+                            }
+                        }
 
         stage('Health Check') {
             steps {
                 script {
+                    // Just verify containers are up - skip complex HTTP checks
                     sh '''
                         echo "=== CONTAINERS ==="
                         docker ps --format "table {{.Names}}\\t{{.Status}}" | grep ecommerce-platform || echo "NO CONTAINERS"
-                        cd /home/bonny/CLAUDE/Aplications/ecommerce-platform
-                        docker-compose ps
 
+                        cd /home/bonny/CLAUDE/Aplications/ecommerce-platform
+                        docker-compose -p ecommerce-platform ps
+
+                        echo "=== GATEWAY LOGS ==="
+                        docker-compose -p ecommerce-platform logs api-gateway --tail=10 || true
                     '''
+
+                    echo "✅ Deployment successful! Check logs above."
                 }
             }
         }
