@@ -169,7 +169,7 @@ pipeline {
                         docker exec -it jenkins bash  && chmod 777 /home/bonny/CLAUDE/Aplications/ecommerce-platform
                         cd /home/bonny/CLAUDE/Aplications/ecommerce-platform
                         docker-compose down -v --remove-orphans
-                        docker-compose  docker-compose.yaml up -d  
+                        docker-compose   up -d  
                         sleep 15
                         
                         echo "=== STATUS ==="
