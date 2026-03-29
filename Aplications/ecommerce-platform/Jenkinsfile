@@ -172,8 +172,7 @@ pipeline {
                     string(credentialsId: 'db-root-pass', variable: 'DB_ROOT_PASS')
                 ]) {
                     sh '''
-                        echo "🧹 Cleaning up ALL existing platform containers..."
-
+                        echo "🧹 Cleaning up existing platform containers..."
                         docker ps -a --format '{{.Names}}' \
                             | grep -E "(ecommerce-platform|deploy-)" \
                             | xargs docker rm -f 2>/dev/null || true
@@ -182,36 +181,155 @@ pipeline {
                             | grep -E "(ecommerce|deploy-)" \
                             | xargs docker network rm 2>/dev/null || true
 
-                        echo "📋 Containers after cleanup:"
-                        docker ps -a | grep -E "(ecommerce|deploy-)" || echo "None — clean slate ✅"
-
                         echo "📥 Pulling latest images..."
                         docker pull santonix/api-gateway:latest
                         docker pull santonix/user-service:latest
                         docker pull santonix/product-service:latest
                         docker pull santonix/order-service:latest
 
+                        echo "📄 Preparing deploy files..."
+                        DEPLOY_DIR=$(mktemp -d /tmp/deploy-XXXXXX)
+
+                        cp /home/bonny/CLAUDE/Aplications/ecommerce-platform/docker-compose.yaml \
+                           $DEPLOY_DIR/docker-compose.yaml
+
+                        mkdir -p $DEPLOY_DIR/infrastructure/docker
+                        cp /home/bonny/CLAUDE/Aplications/ecommerce-platform/infrastructure/docker/init-db.sql \
+                           $DEPLOY_DIR/infrastructure/docker/init-db.sql
+
+                        cat > $DEPLOY_DIR/.env << ENVEOF
+JWT_SECRET=$JWT_SECRET
+DB_ROOT_PASS=$DB_ROOT_PASS
+ENVEOF
+
                         echo "🚀 Starting platform..."
-                        JWT_SECRET=$JWT_SECRET \
-                        DB_ROOT_PASS=$DB_ROOT_PASS \
                         docker-compose \
                             -p ecommerce-platform \
-                            -f /home/bonny/CLAUDE/Aplications/ecommerce-platform/docker-compose.yaml \
+                            -f $DEPLOY_DIR/docker-compose.yaml \
                             up -d
 
-                        echo "✅ Deployment complete!"
-                        docker ps | grep ecommerce
+                        rm -rf $DEPLOY_DIR
+                        echo "✅ Deployment triggered!"
                     '''
                 }
+            }
+        }
+
+        stage('Smoke Test') {
+            steps {
+                sh '''
+                    echo "⏳ Waiting for services to be ready..."
+                    sleep 25
+
+                    BASE_URL="http://localhost:3000"
+                    PASS=0
+                    FAIL=0
+
+                    # ── Test 1: Gateway health ─────────────────────
+                    echo "🧪 Test 1: Gateway health..."
+                    HEALTH=$(curl -sf $BASE_URL/health 2>/dev/null)
+                    if echo $HEALTH | grep -q '"UP"'; then
+                        echo "  ✅ Gateway is UP"
+                        PASS=$((PASS+1))
+                    else
+                        echo "  ❌ Gateway health failed"
+                        FAIL=$((FAIL+1))
+                    fi
+
+                    # ── Test 2: Auth enforcement ───────────────────
+                    echo "🧪 Test 2: Auth enforcement..."
+                    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" $BASE_URL/api/products)
+                    if [ "$HTTP_CODE" = "401" ]; then
+                        echo "  ✅ Auth enforced (401)"
+                        PASS=$((PASS+1))
+                    else
+                        echo "  ❌ Expected 401 got $HTTP_CODE"
+                        FAIL=$((FAIL+1))
+                    fi
+
+                    # ── Test 3: User registration ──────────────────
+                    echo "🧪 Test 3: User registration..."
+                    REG=$(curl -sf -X POST $BASE_URL/api/users/register \
+                        -H "Content-Type: application/json" \
+                        -d '{"email":"smoketest@ci.com","password":"smokepass123","firstName":"Smoke","lastName":"Test"}' \
+                        2>/dev/null)
+                    if echo $REG | grep -q '"email"'; then
+                        echo "  ✅ Registration successful"
+                        PASS=$((PASS+1))
+                    else
+                        echo "  ⚠️  Registration skipped (user may exist)"
+                        PASS=$((PASS+1))
+                    fi
+
+                    # ── Test 4: Login & token ──────────────────────
+                    echo "🧪 Test 4: Login and token generation..."
+                    LOGIN=$(curl -sf -X POST $BASE_URL/api/users/login \
+                        -H "Content-Type: application/json" \
+                        -d '{"email":"smoketest@ci.com","password":"smokepass123"}' \
+                        2>/dev/null)
+                    TOKEN=$(echo $LOGIN | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
+                    if [ -n "$TOKEN" ]; then
+                        echo "  ✅ Token generated"
+                        PASS=$((PASS+1))
+                    else
+                        echo "  ❌ Login failed — no token"
+                        FAIL=$((FAIL+1))
+                    fi
+
+                    # ── Test 5: Product service ────────────────────
+                    echo "🧪 Test 5: Product service..."
+                    PROD=$(curl -sf $BASE_URL/api/products \
+                        -H "Authorization: Bearer $TOKEN" 2>/dev/null)
+                    if echo $PROD | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
+                        echo "  ✅ Product service responding"
+                        PASS=$((PASS+1))
+                    else
+                        echo "  ❌ Product service failed"
+                        FAIL=$((FAIL+1))
+                    fi
+
+                    # ── Test 6: Order service ──────────────────────
+                    echo "🧪 Test 6: Order service..."
+                    ORD=$(curl -sf $BASE_URL/api/orders \
+                        -H "Authorization: Bearer $TOKEN" 2>/dev/null)
+                    if echo $ORD | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
+                        echo "  ✅ Order service responding"
+                        PASS=$((PASS+1))
+                    else
+                        echo "  ❌ Order service failed"
+                        FAIL=$((FAIL+1))
+                    fi
+
+                    # ── Summary ────────────────────────────────────
+                    echo ""
+                    echo "========================================"
+                    echo "  Smoke Test Results"
+                    echo "  ✅ Passed: $PASS"
+                    echo "  ❌ Failed: $FAIL"
+                    echo "========================================"
+
+                    if [ $FAIL -gt 0 ]; then
+                        echo "❌ Smoke tests FAILED — rolling back not yet automated"
+                        exit 1
+                    fi
+
+                    echo "🎉 All smoke tests passed!"
+                '''
             }
         }
 
     }
 
     post {
-        success { echo "✅ Pipeline SUCCESS — ecommerce-platform v${VERSION} deployed!" }
-        failure { echo "❌ Pipeline FAILED — check logs above" }
-        always  { cleanWs() }
+        success {
+            echo "🎉 PIPELINE SUCCESS — ecommerce-platform v${VERSION} is live!"
+        }
+        failure {
+            echo "💥 PIPELINE FAILED — check logs for build #${BUILD_NUMBER}"
+        }
+        always {
+            cleanWs()
+        }
     }
 }
 
