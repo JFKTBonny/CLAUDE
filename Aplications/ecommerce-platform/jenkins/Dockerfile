@@ -1,6 +1,7 @@
 FROM jenkins/jenkins:lts
 USER root
-
+RUN  chown -R jenkins:jenkins /home/bonny/CLAUDE/Aplications/ecommerce-platform \
+    chmod 777 /home/bonny/CLAUDE/Aplications/ecommerce-platform     
 # 1. Install prerequisites
 RUN apt-get update && apt-get install -y \
     lsb-release \

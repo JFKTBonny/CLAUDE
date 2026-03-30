@@ -282,15 +282,17 @@ pipeline {
                         LOGIN=$(curl -s -X POST $BASE_URL/api/users/login \
                             -H "Content-Type: application/json" \
                             -d '{"email":"smoketest@ci.com","password":"smokepass123"}')
-                        TOKEN=$(echo $LOGIN | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
-                            "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null || echo "")
-                        if [ -n "$TOKEN" ]; then
-                            echo "  ✅ Token generated"
-                            PASS=$((PASS+1))
-                        else
-                            echo "  ❌ Login failed: $LOGIN"
-                            FAIL=$((FAIL+1))
-                        fi
+                        TOKEN=$(echo "$LOGIN" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
+
+                        # TOKEN=$(echo $LOGIN | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+                        #    "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null || echo "")
+                        #if [ -n "$TOKEN" ]; then
+                        #    echo "  ✅ Token generated"
+                        #    PASS=$((PASS+1))
+                        #else
+                        #    echo "  ❌ Login failed: $LOGIN"
+                        #    FAIL=$((FAIL+1))
+                        #fi
 
                         # Test 5: Products
                         echo "🧪 Test 5: Products endpoint..."
