@@ -30,8 +30,10 @@ const authenticate = (req, res, next) => {
 // ── Proxy factory ──────────────────────────────────────────────────
 const forward = (baseUrl) => async (req, res) => {
     try {
-        const url = `${baseUrl}${req.originalUrl}`;
-        console.log(`[PROXY] ${req.method} ${url}`);
+        const path = req.originalUrl.replace(/^\/api/, '');
+        const url = `${baseUrl}${path}`;
+
+        console.log(`[PROXY] ${req.method} ${req.originalUrl} → ${url}`);
         const response = await axios({
             method:  req.method,
             url,
