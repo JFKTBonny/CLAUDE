@@ -15,6 +15,7 @@ const SERVICES = {
 app.use(rateLimit({ windowMs: 60_000, max: 100 }));
 app.use(express.json());
 
+// ── Auth middleware ────────────────────────────────────────────────
 const authenticate = (req, res, next) => {
     const token = req.headers['authorization']?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'Unauthorized' });
@@ -26,9 +27,11 @@ const authenticate = (req, res, next) => {
     }
 };
 
+// ── Proxy factory ──────────────────────────────────────────────────
 const forward = (baseUrl) => async (req, res) => {
     try {
         const url = `${baseUrl}${req.originalUrl}`;
+        console.log(`[PROXY] ${req.method} ${url}`);
         const response = await axios({
             method:  req.method,
             url,
@@ -42,28 +45,33 @@ const forward = (baseUrl) => async (req, res) => {
         });
         res.status(response.status).json(response.data);
     } catch (err) {
+        console.error(`[ERROR] ${err.message}`);
         res.status(502).json({ error: 'Service unavailable', detail: err.message });
     }
 };
 
+// ── Health ─────────────────────────────────────────────────────────
 app.get('/health', (_, res) => res.json({
     status:    'UP',
     version:   process.env.APP_VERSION || '1.0.0',
     timestamp: new Date().toISOString(),
 }));
 
+// ── Public routes ──────────────────────────────────────────────────
 app.post('/api/users/register', forward(SERVICES.user));
 app.post('/api/users/login',    forward(SERVICES.user));
-app.use('/api/users',    authenticate, forward(SERVICES.user));
-app.use('/api/products', authenticate, forward(SERVICES.product));
-app.use('/api/orders',   authenticate, forward(SERVICES.order));
 
-// Only start server if run directly, not when imported by tests
-if (require.main === module) {
-    app.listen(3000, () => {
-        console.log('🚀 API Gateway running on :3000');
-        console.log('Services:', SERVICES);
-    });
-}
+// Categories public — no auth needed for browsing
+app.get('/api/categories',      forward(SERVICES.product));
+app.get('/api/categories/:slug',forward(SERVICES.product));
 
-module.exports = app;   // ← export for testing
+// ── Protected routes ───────────────────────────────────────────────
+app.use('/api/users',      authenticate, forward(SERVICES.user));
+app.use('/api/categories', authenticate, forward(SERVICES.product));
+app.use('/api/products',   authenticate, forward(SERVICES.product));
+app.use('/api/orders',     authenticate, forward(SERVICES.order));
+
+app.listen(3000, () => {
+    console.log('🚀 API Gateway running on :3000');
+    console.log('Services:', SERVICES);
+});
