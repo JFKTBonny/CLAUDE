@@ -58,12 +58,10 @@ app.get('/health', (_, res) => res.json({
 }));
 
 // ── Public routes ──────────────────────────────────────────────────
-app.post('/api/users/register', forward(SERVICES.user));
-app.post('/api/users/login',    forward(SERVICES.user));
-
-// Categories public — no auth needed for browsing
-app.get('/api/categories',      forward(SERVICES.product));
-app.get('/api/categories/:slug',forward(SERVICES.product));
+app.post('/api/users/register',  forward(SERVICES.user));
+app.post('/api/users/login',     forward(SERVICES.user));
+app.get('/api/categories',       forward(SERVICES.product));
+app.get('/api/categories/:slug', forward(SERVICES.product));
 
 // ── Protected routes ───────────────────────────────────────────────
 app.use('/api/users',      authenticate, forward(SERVICES.user));
@@ -71,7 +69,12 @@ app.use('/api/categories', authenticate, forward(SERVICES.product));
 app.use('/api/products',   authenticate, forward(SERVICES.product));
 app.use('/api/orders',     authenticate, forward(SERVICES.order));
 
-app.listen(3000, () => {
-    console.log('🚀 API Gateway running on :3000');
-    console.log('Services:', SERVICES);
-});
+// ── Start server only when run directly ───────────────────────────
+if (require.main === module) {
+    app.listen(3000, () => {
+        console.log('🚀 API Gateway running on :3000');
+        console.log('Services:', SERVICES);
+    });
+}
+
+module.exports = app;
