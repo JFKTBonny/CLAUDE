@@ -1,8 +1,8 @@
--- infrastructure/docker/init-db.sql
 CREATE DATABASE IF NOT EXISTS users_db;
 CREATE DATABASE IF NOT EXISTS products_db;
 CREATE DATABASE IF NOT EXISTS orders_db;
 
+-- ── Users ──────────────────────────────────────────────────────────
 USE users_db;
 CREATE TABLE IF NOT EXISTS users (
     id            BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -10,10 +10,20 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     first_name    VARCHAR(100),
     last_name     VARCHAR(100),
+    role          ENUM('customer','admin') DEFAULT 'customer',
     created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ── Products ───────────────────────────────────────────────────────
 USE products_db;
+CREATE TABLE IF NOT EXISTS categories (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(100) NOT NULL,
+    slug        VARCHAR(100) UNIQUE NOT NULL,
+    description VARCHAR(500),
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS products (
     id          INT AUTO_INCREMENT PRIMARY KEY,
     name        VARCHAR(255) NOT NULL,
@@ -21,16 +31,52 @@ CREATE TABLE IF NOT EXISTS products (
     price       DECIMAL(10,2) NOT NULL,
     stock       INT DEFAULT 0,
     sku         VARCHAR(100) UNIQUE NOT NULL,
-    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    category_id INT,
+    image_url   VARCHAR(500),
+    is_active   BOOLEAN DEFAULT TRUE,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
 );
 
+-- Seed categories
+INSERT IGNORE INTO categories (name, slug, description) VALUES
+    ('Electronics',  'electronics',  'Phones, laptops, gadgets'),
+    ('Clothing',     'clothing',     'Shirts, pants, shoes'),
+    ('Books',        'books',        'Fiction, non-fiction, technical'),
+    ('Home & Garden','home-garden',  'Furniture, tools, decor'),
+    ('Sports',       'sports',       'Equipment, clothing, accessories');
+
+-- ── Orders ─────────────────────────────────────────────────────────
 USE orders_db;
 CREATE TABLE IF NOT EXISTS orders (
     id          INT AUTO_INCREMENT PRIMARY KEY,
     user_id     INT NOT NULL,
+    status      ENUM('PENDING','CONFIRMED','SHIPPED','DELIVERED','CANCELLED') DEFAULT 'PENDING',
+    total_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+    notes       VARCHAR(500),
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS order_items (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    order_id    INT NOT NULL,
     product_id  INT NOT NULL,
     quantity    INT NOT NULL,
-    total_price DECIMAL(10,2) NOT NULL,
-    status      ENUM('PENDING','CONFIRMED','SHIPPED','DELIVERED','CANCELLED') DEFAULT 'PENDING',
-    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    unit_price  DECIMAL(10,2) NOT NULL,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+);
+
+-- ── Cart ───────────────────────────────────────────────────────────
+CREATE DATABASE IF NOT EXISTS cart_db;
+USE cart_db;
+CREATE TABLE IF NOT EXISTS cart_items (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    user_id     INT NOT NULL,
+    product_id  INT NOT NULL,
+    quantity    INT NOT NULL DEFAULT 1,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_cart_item (user_id, product_id)
 );
