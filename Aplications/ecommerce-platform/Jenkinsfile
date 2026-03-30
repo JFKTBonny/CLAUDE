@@ -282,7 +282,7 @@ pipeline {
                         LOGIN=$(curl -s -X POST $BASE_URL/api/users/login \
                             -H "Content-Type: application/json" \
                             -d '{"email":"smoketest@ci.com","password":"smokepass123"}')
-                        TOKEN=$(echo "$LOGIN" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
+                        TOKEN=$(echo "$LOGIN" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
 
                         # TOKEN=$(echo $LOGIN | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
                         #    "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null || echo "")
