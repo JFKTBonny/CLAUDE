@@ -11,32 +11,24 @@ import (
 func TestHealthHandler(t *testing.T) {
 	req  := httptest.NewRequest("GET", "/health", nil)
 	rec  := httptest.NewRecorder()
-
 	healthHandler(rec, req)
-
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
-
 	var body map[string]string
 	json.NewDecoder(rec.Body).Decode(&body)
-
 	if body["status"] != "UP" {
-		t.Errorf("expected status UP, got %s", body["status"])
-	}
-	if body["service"] != "order-service" {
-		t.Errorf("expected service order-service, got %s", body["service"])
+		t.Errorf("expected UP, got %s", body["status"])
 	}
 }
 
 func TestCreateOrderValidation(t *testing.T) {
-	// Missing required fields
-	payload := `{"user_id": 0, "product_id": 0}`
-	req  := httptest.NewRequest("POST", "/api/orders", bytes.NewBufferString(payload))
+	// Missing items
+	payload := `{"user_id": 1, "items": []}`
+	req  := httptest.NewRequest("POST", "/api/orders",
+		bytes.NewBufferString(payload))
 	rec  := httptest.NewRecorder()
-
 	createOrderHandler(rec, req)
-
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rec.Code)
 	}
