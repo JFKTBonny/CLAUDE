@@ -15,7 +15,11 @@ const SERVICES = {
 app.use(rateLimit({ windowMs: 60_000, max: 100 }));
 app.use(express.json());
 
-// ── Auth middleware ────────────────────────────────────────────────
+app.use((req, res, next) => {
+    req.fullPath = req.originalUrl;
+    next();
+});
+
 const authenticate = (req, res, next) => {
     const token = req.headers['authorization']?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'Unauthorized' });
@@ -27,13 +31,10 @@ const authenticate = (req, res, next) => {
     }
 };
 
-// ── Proxy factory ──────────────────────────────────────────────────
 const forward = (baseUrl) => async (req, res) => {
     try {
-        const path = req.originalUrl.replace(/^\/api/, '');
-        const url = `${baseUrl}${path}`;
-
-        console.log(`[PROXY] ${req.method} ${req.originalUrl} → ${url}`);
+        const url = `${baseUrl}${req.fullPath}`;
+        console.log(`[PROXY] ${req.method} ${req.fullPath} -> ${url}`);
         const response = await axios({
             method:  req.method,
             url,
@@ -52,29 +53,25 @@ const forward = (baseUrl) => async (req, res) => {
     }
 };
 
-// ── Health ─────────────────────────────────────────────────────────
 app.get('/health', (_, res) => res.json({
     status:    'UP',
     version:   process.env.APP_VERSION || '1.0.0',
     timestamp: new Date().toISOString(),
 }));
 
-// ── Public routes ──────────────────────────────────────────────────
 app.post('/api/users/register',  forward(SERVICES.user));
 app.post('/api/users/login',     forward(SERVICES.user));
 app.get('/api/categories',       forward(SERVICES.product));
 app.get('/api/categories/:slug', forward(SERVICES.product));
 
-// ── Protected routes ───────────────────────────────────────────────
 app.use('/api/users',      authenticate, forward(SERVICES.user));
 app.use('/api/categories', authenticate, forward(SERVICES.product));
 app.use('/api/products',   authenticate, forward(SERVICES.product));
 app.use('/api/orders',     authenticate, forward(SERVICES.order));
 
-// ── Start server only when run directly ───────────────────────────
 if (require.main === module) {
     app.listen(3000, () => {
-        console.log('🚀 API Gateway running on :3000');
+        console.log('API Gateway running on :3000');
         console.log('Services:', SERVICES);
     });
 }
