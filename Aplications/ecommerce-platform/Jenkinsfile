@@ -3,8 +3,8 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_REGISTRY  = 'santonix'
-        VERSION          = "1.0.${BUILD_NUMBER}"
+        DOCKER_REGISTRY = 'santonix'
+        VERSION         = "1.0.${BUILD_NUMBER}"
     }
 
     options {
@@ -39,10 +39,12 @@ pipeline {
                                     .contains('UserIdCause')
                     )
 
-                    env.BUILD_GATEWAY = (buildAll || changed.contains('api-gateway'))     ? 'true' : 'false'
-                    env.BUILD_USER    = (buildAll || changed.contains('user-service'))    ? 'true' : 'false'
-                    env.BUILD_PRODUCT = (buildAll || changed.contains('product-service')) ? 'true' : 'false'
-                    env.BUILD_ORDER   = (buildAll || changed.contains('order-service'))   ? 'true' : 'false'
+                    env.BUILD_GATEWAY  = (buildAll || changed.contains('api-gateway'))     ? 'true' : 'false'
+                    env.BUILD_USER     = (buildAll || changed.contains('user-service'))    ? 'true' : 'false'
+                    env.BUILD_PRODUCT  = (buildAll || changed.contains('product-service')) ? 'true' : 'false'
+                    env.BUILD_ORDER    = (buildAll || changed.contains('order-service'))   ? 'true' : 'false'
+                    env.BUILD_CART     = (buildAll || changed.contains('cart-service'))    ? 'true' : 'false'
+                    env.BUILD_FRONTEND = (buildAll || changed.contains('frontend'))        ? 'true' : 'false'
 
                     echo """
                     ========================================
@@ -51,6 +53,8 @@ pipeline {
                        user-service:    ${env.BUILD_USER}
                        product-service: ${env.BUILD_PRODUCT}
                        order-service:   ${env.BUILD_ORDER}
+                       cart-service:    ${env.BUILD_CART}
+                       frontend:        ${env.BUILD_FRONTEND}
                     ----------------------------------------
                        Changed files: ${changed}
                        Full build:    ${buildAll}
@@ -116,6 +120,32 @@ pipeline {
                     }
                 }
 
+                stage('Cart Service') {
+                    when { expression { env.BUILD_CART == 'true' } }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/cart-service:/app \
+                                -w /app node:18-alpine \
+                                sh -c "npm ci && npm test -- --passWithNoTests --forceExit"
+                            echo "✅ Cart Service tests passed!"
+                        '''
+                    }
+                }
+
+                stage('Frontend') {
+                    when { expression { env.BUILD_FRONTEND == 'true' } }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/frontend:/app \
+                                -w /app node:18-alpine \
+                                sh -c "npm install && npm run build"
+                            echo "✅ Frontend build passed!"
+                        '''
+                    }
+                }
+
             }
         }
 
@@ -162,6 +192,26 @@ pipeline {
                     }
                 }
 
+                stage('Cart') {
+                    when { expression { env.BUILD_CART == 'true' } }
+                    steps {
+                        script {
+                            buildAndPush('cart-service',
+                                "${WORKSPACE}/Aplications/ecommerce-platform/services/cart-service")
+                        }
+                    }
+                }
+
+                stage('Frontend') {
+                    when { expression { env.BUILD_FRONTEND == 'true' } }
+                    steps {
+                        script {
+                            buildAndPush('frontend',
+                                "${WORKSPACE}/Aplications/ecommerce-platform/frontend")
+                        }
+                    }
+                }
+
             }
         }
 
@@ -172,24 +222,22 @@ pipeline {
                     string(credentialsId: 'db-root-pass', variable: 'DB_ROOT_PASS')
                 ]) {
                     sh '''
-                        echo "🧹 Stopping app containers (keeping MySQL data)..."
-
-                        # Stop only app containers — NOT mysql → no data loss
-                        docker rm -f \
-                            ecommerce-platform-api-gateway-1 \
-                            ecommerce-platform-user-service-1 \
-                            ecommerce-platform-product-service-1 \
-                            ecommerce-platform-order-service-1 2>/dev/null || true
+                        echo "🧹 Stopping app containers..."
+                        docker ps -a --format '{{.Names}}' \
+                            | grep "ecommerce-platform" \
+                            | grep -v mysql \
+                            | xargs docker rm -f 2>/dev/null || true
 
                         echo "📥 Pulling latest images..."
                         docker pull santonix/api-gateway:latest
                         docker pull santonix/user-service:latest
                         docker pull santonix/product-service:latest
                         docker pull santonix/order-service:latest
+                        docker pull santonix/cart-service:latest
+                        docker pull santonix/frontend:latest
 
                         echo "🚀 Starting platform..."
                         cd /home/bonny/CLAUDE/Aplications/ecommerce-platform
-
                         JWT_SECRET=$JWT_SECRET \
                         DB_ROOT_PASS=$DB_ROOT_PASS \
                         docker-compose -p ecommerce-platform up -d
@@ -234,41 +282,30 @@ pipeline {
                         PASS=0
                         FAIL=0
 
-                        # Wait for user-service to be ready
+                        # Wait for user-service
                         echo "⏳ Waiting for user-service..."
                         for i in $(seq 1 20); do
-                            CODE=$(curl -s -o /dev/null -w "%{http_code}" http://user-service:8081/api/users/health 2>/dev/null || echo "000")
-                            if [ "$CODE" = "200" ]; then
-                                echo "✅ User service ready after $((i * 3))s"
-                                break
-                            fi
-                            echo "  ⏳ user-service not ready ($CODE) — waiting 3s..."
+                            CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+                                http://user-service:8081/api/users/health 2>/dev/null || echo "000")
+                            [ "$CODE" = "200" ] && break
                             sleep 3
                         done
 
                         # Test 1: Gateway health
                         echo "🧪 Test 1: Gateway health..."
                         HEALTH=$(curl -s $BASE_URL/health)
-                        if echo $HEALTH | grep -q "UP"; then
-                            echo "  ✅ Gateway UP"
-                            PASS=$((PASS+1))
-                        else
-                            echo "  ❌ Gateway DOWN: $HEALTH"
-                            FAIL=$((FAIL+1))
-                        fi
+                        echo $HEALTH | grep -q "UP" && \
+                            echo "  ✅ Gateway UP" && PASS=$((PASS+1)) || \
+                            { echo "  ❌ Gateway DOWN"; FAIL=$((FAIL+1)); }
 
                         # Test 2: Auth enforcement
                         echo "🧪 Test 2: Auth enforcement..."
                         CODE=$(curl -s -o /dev/null -w "%{http_code}" $BASE_URL/api/products)
-                        if [ "$CODE" = "401" ]; then
-                            echo "  ✅ Auth enforced (401)"
-                            PASS=$((PASS+1))
-                        else
-                            echo "  ❌ Expected 401 got $CODE"
-                            FAIL=$((FAIL+1))
-                        fi
+                        [ "$CODE" = "401" ] && \
+                            echo "  ✅ Auth enforced (401)" && PASS=$((PASS+1)) || \
+                            { echo "  ❌ Expected 401 got $CODE"; FAIL=$((FAIL+1)); }
 
-                        # Test 3: Register smoke user
+                        # Test 3: Register
                         echo "🧪 Test 3: User registration..."
                         curl -s -X POST $BASE_URL/api/users/register \
                             -H "Content-Type: application/json" \
@@ -279,50 +316,57 @@ pipeline {
 
                         # Test 4: Login
                         echo "🧪 Test 4: Login..."
-
-                        LOGIN=$(curl -s -X POST "$BASE_URL/api/users/login" \
+                        LOGIN=$(curl -s -X POST $BASE_URL/api/users/login \
                             -H "Content-Type: application/json" \
                             -d '{"email":"smoketest@ci.com","password":"smokepass123"}')
-
-                        TOKEN=$(echo "$LOGIN" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
-
-                        if [ -n "$TOKEN" ]; then
-                            echo "  ✅ Token generated"
-                            PASS=$((PASS+1))
-                        else
-                            echo "  ❌ Login failed: $LOGIN"
-                            FAIL=$((FAIL+1))
-                        fi
+                        TOKEN=$(echo $LOGIN | grep -o '"token":"[^"]*"' | cut -d'"'  -f4)
+                        [ -n "$TOKEN" ] && \
+                            echo "  ✅ Token generated" && PASS=$((PASS+1)) || \
+                            { echo "  ❌ Login failed: $LOGIN"; FAIL=$((FAIL+1)); }
 
                         # Test 5: Products
                         echo "🧪 Test 5: Products endpoint..."
                         CODE=$(curl -s -o /dev/null -w "%{http_code}" $BASE_URL/api/products \
                             -H "Authorization: Bearer $TOKEN")
-                        if [ "$CODE" = "200" ]; then
-                            echo "  ✅ Products OK (200)"
-                            PASS=$((PASS+1))
-                        else
-                            echo "  ❌ Products failed: HTTP $CODE"
-                            FAIL=$((FAIL+1))
-                        fi
+                        [ "$CODE" = "200" ] && \
+                            echo "  ✅ Products OK (200)" && PASS=$((PASS+1)) || \
+                            { echo "  ❌ Products failed: HTTP $CODE"; FAIL=$((FAIL+1)); }
 
                         # Test 6: Orders
                         echo "🧪 Test 6: Orders endpoint..."
                         CODE=$(curl -s -o /dev/null -w "%{http_code}" $BASE_URL/api/orders \
                             -H "Authorization: Bearer $TOKEN")
-                        if [ "$CODE" = "200" ]; then
-                            echo "  ✅ Orders OK (200)"
-                            PASS=$((PASS+1))
-                        else
-                            echo "  ❌ Orders failed: HTTP $CODE"
-                            FAIL=$((FAIL+1))
-                        fi
+                        [ "$CODE" = "200" ] && \
+                            echo "  ✅ Orders OK (200)" && PASS=$((PASS+1)) || \
+                            { echo "  ❌ Orders failed: HTTP $CODE"; FAIL=$((FAIL+1)); }
+
+                        # Test 7: Cart
+                        echo "🧪 Test 7: Cart endpoint..."
+                        CODE=$(curl -s -o /dev/null -w "%{http_code}" $BASE_URL/api/cart \
+                            -H "Authorization: Bearer $TOKEN")
+                        [ "$CODE" = "200" ] && \
+                            echo "  ✅ Cart OK (200)" && PASS=$((PASS+1)) || \
+                            { echo "  ❌ Cart failed: HTTP $CODE"; FAIL=$((FAIL+1)); }
+
+                        # Test 8: Categories (public)
+                        echo "🧪 Test 8: Categories endpoint..."
+                        CODE=$(curl -s -o /dev/null -w "%{http_code}" $BASE_URL/api/categories)
+                        [ "$CODE" = "200" ] && \
+                            echo "  ✅ Categories OK (200)" && PASS=$((PASS+1)) || \
+                            { echo "  ❌ Categories failed: HTTP $CODE"; FAIL=$((FAIL+1)); }
+
+                        # Test 9: Frontend
+                        echo "🧪 Test 9: Frontend..."
+                        CODE=$(curl -s -o /dev/null -w "%{http_code}" http://frontend:80/health)
+                        [ "$CODE" = "200" ] && \
+                            echo "  ✅ Frontend OK (200)" && PASS=$((PASS+1)) || \
+                            { echo "  ❌ Frontend failed: HTTP $CODE"; FAIL=$((FAIL+1)); }
 
                         echo ""
                         echo "========================================"
                         echo "  Smoke Test Results — Build #$BUILD_NUMBER"
-                        echo "  ✅ Passed: $PASS / 6"
-                        echo "  ❌ Failed: $FAIL / 6"
+                        echo "  ✅ Passed: $PASS / 9"
+                        echo "  ❌ Failed: $FAIL / 9"
                         echo "========================================"
 
                         [ $FAIL -eq 0 ] && echo "🎉 All smoke tests passed!" || exit 1
@@ -334,15 +378,9 @@ pipeline {
     }
 
     post {
-        success {
-            echo "🎉 PIPELINE SUCCESS — ecommerce-platform v${VERSION} is live!"
-        }
-        failure {
-            echo "💥 PIPELINE FAILED — check logs for build #${BUILD_NUMBER}"
-        }
-        always {
-            cleanWs()
-        }
+        success { echo "🎉 PIPELINE SUCCESS — ecommerce-platform v${VERSION} is live!" }
+        failure { echo "💥 PIPELINE FAILED — check logs for build #${BUILD_NUMBER}" }
+        always  { cleanWs() }
     }
 }
 
@@ -357,7 +395,7 @@ def buildAndPush(String service, String contextPath) {
             TMPDIR=\$(mktemp -d /tmp/jenkins-build-XXXXXX)
             cp -r ${contextPath}/. \$TMPDIR/
 
-            docker build \
+            docker build --no-cache \
                 -t ${DOCKER_REGISTRY}/${service}:${VERSION} \
                 -t ${DOCKER_REGISTRY}/${service}:latest \
                 \$TMPDIR/
