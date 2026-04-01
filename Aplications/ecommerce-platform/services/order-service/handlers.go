@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gorilla/mux"
 )
@@ -38,6 +39,29 @@ type CreateOrderRequest struct {
 
 type StatusUpdate struct {
 	Status string `json:"status"`
+	Notes  string `json:"notes"`
+}
+
+// ── Valid transitions ───────────────────────────────────────────────
+var validTransitions = map[string][]string{
+	"PENDING":   {"CONFIRMED", "CANCELLED"},
+	"CONFIRMED": {"SHIPPED", "CANCELLED"},
+	"SHIPPED":   {"DELIVERED"},
+	"DELIVERED": {},
+	"CANCELLED": {},
+}
+
+func isValidTransition(from, to string) bool {
+	allowed, exists := validTransitions[from]
+	if !exists {
+		return false
+	}
+	for _, s := range allowed {
+		if s == to {
+			return true
+		}
+	}
+	return false
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -50,6 +74,30 @@ func jsonResponse(w http.ResponseWriter, status int, payload any) {
 
 func errorResponse(w http.ResponseWriter, status int, msg string) {
 	jsonResponse(w, status, map[string]string{"error": msg})
+}
+
+func getOrderItems(orderID int) []OrderItem {
+	rows, err := db.Query(
+		`SELECT id, order_id, product_id, quantity, unit_price
+		 FROM order_items WHERE order_id = ?`, orderID,
+	)
+	if err != nil {
+		return []OrderItem{}
+	}
+	defer rows.Close()
+
+	items := []OrderItem{}
+	for rows.Next() {
+		var item OrderItem
+		if err := rows.Scan(
+			&item.ID, &item.OrderID,
+			&item.ProductID, &item.Quantity, &item.UnitPrice,
+		); err != nil {
+			continue
+		}
+		items = append(items, item)
+	}
+	return items
 }
 
 // ── Handlers ───────────────────────────────────────────────────────
@@ -65,30 +113,31 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 // GET /api/orders
 func listOrdersHandler(w http.ResponseWriter, r *http.Request) {
 	userIDParam := r.URL.Query().Get("user_id")
+	statusParam := r.URL.Query().Get("status")
 
-	var (
-		rows *sql.Rows
-		err  error
-	)
+	query := `SELECT id, user_id, status, total_price,
+	                 COALESCE(notes,""), created_at, updated_at
+	          FROM orders WHERE 1=1`
+	args  := []interface{}{}
 
 	if userIDParam != "" {
-		uid, convErr := strconv.Atoi(userIDParam)
-		if convErr != nil {
+		uid, err := strconv.Atoi(userIDParam)
+		if err != nil {
 			errorResponse(w, http.StatusBadRequest, "invalid user_id")
 			return
 		}
-		rows, err = db.Query(`
-			SELECT id, user_id, status, total_price,
-			       COALESCE(notes,''), created_at, updated_at
-			FROM orders WHERE user_id = ?
-			ORDER BY created_at DESC`, uid)
-	} else {
-		rows, err = db.Query(`
-			SELECT id, user_id, status, total_price,
-			       COALESCE(notes,''), created_at, updated_at
-			FROM orders ORDER BY created_at DESC`)
+		query += " AND user_id = ?"
+		args = append(args, uid)
 	}
 
+	if statusParam != "" {
+		query += " AND status = ?"
+		args = append(args, statusParam)
+	}
+
+	query += " ORDER BY created_at DESC"
+
+	rows, err := db.Query(query, args...)
 	if err != nil {
 		errorResponse(w, http.StatusInternalServerError, "failed to fetch orders")
 		return
@@ -106,7 +155,6 @@ func listOrdersHandler(w http.ResponseWriter, r *http.Request) {
 			errorResponse(w, http.StatusInternalServerError, "failed to parse order")
 			return
 		}
-		// Load items for each order
 		o.Items = getOrderItems(o.ID)
 		orders = append(orders, o)
 	}
@@ -131,23 +179,20 @@ func createOrderHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Calculate total
 	var total float64
 	for _, item := range req.Items {
 		total += item.UnitPrice * float64(item.Quantity)
 	}
 
-	// Begin transaction
 	tx, err := db.Begin()
 	if err != nil {
 		errorResponse(w, http.StatusInternalServerError, "failed to start transaction")
 		return
 	}
 
-	// Insert order
-	result, err := tx.Exec(`
-		INSERT INTO orders (user_id, status, total_price, notes)
-		VALUES (?, 'PENDING', ?, ?)`,
+	result, err := tx.Exec(
+		`INSERT INTO orders (user_id, status, total_price, notes)
+		 VALUES (?, "PENDING", ?, ?)`,
 		req.UserID, total, req.Notes,
 	)
 	if err != nil {
@@ -158,11 +203,10 @@ func createOrderHandler(w http.ResponseWriter, r *http.Request) {
 
 	orderID, _ := result.LastInsertId()
 
-	// Insert order items
 	for _, item := range req.Items {
-		_, err := tx.Exec(`
-			INSERT INTO order_items (order_id, product_id, quantity, unit_price)
-			VALUES (?, ?, ?, ?)`,
+		_, err := tx.Exec(
+			`INSERT INTO order_items (order_id, product_id, quantity, unit_price)
+			 VALUES (?, ?, ?, ?)`,
 			orderID, item.ProductID, item.Quantity, item.UnitPrice,
 		)
 		if err != nil {
@@ -174,13 +218,13 @@ func createOrderHandler(w http.ResponseWriter, r *http.Request) {
 
 	tx.Commit()
 
-	// Return created order
 	order := Order{
 		ID:         int(orderID),
 		UserID:     req.UserID,
 		Status:     "PENDING",
 		TotalPrice: total,
 		Notes:      req.Notes,
+		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
 		Items:      getOrderItems(int(orderID)),
 	}
 
@@ -196,10 +240,10 @@ func getOrderHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var o Order
-	err = db.QueryRow(`
-		SELECT id, user_id, status, total_price,
-		       COALESCE(notes,''), created_at, updated_at
-		FROM orders WHERE id = ?`, id,
+	err = db.QueryRow(
+		`SELECT id, user_id, status, total_price,
+		        COALESCE(notes,""), created_at, updated_at
+		 FROM orders WHERE id = ?`, id,
 	).Scan(&o.ID, &o.UserID, &o.Status,
 		&o.TotalPrice, &o.Notes,
 		&o.CreatedAt, &o.UpdatedAt)
@@ -217,7 +261,7 @@ func getOrderHandler(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, o)
 }
 
-// PATCH /api/orders/{id}
+// PATCH /api/orders/{id}/status
 func updateOrderStatusHandler(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
@@ -231,36 +275,59 @@ func updateOrderStatusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	validStatuses := map[string]bool{
-		"PENDING": true, "CONFIRMED": true,
-		"SHIPPED": true, "DELIVERED": true, "CANCELLED": true,
+	// Get current status
+	var currentStatus string
+	err = db.QueryRow(
+		`SELECT status FROM orders WHERE id = ?`, id,
+	).Scan(&currentStatus)
+
+	if err == sql.ErrNoRows {
+		errorResponse(w, http.StatusNotFound, "order not found")
+		return
 	}
-	if !validStatuses[su.Status] {
-		errorResponse(w, http.StatusBadRequest, "invalid status value")
+	if err != nil {
+		errorResponse(w, http.StatusInternalServerError, "failed to fetch order")
 		return
 	}
 
-	result, err := db.Exec(
-		`UPDATE orders SET status = ? WHERE id = ?`, su.Status, id,
-	)
+	// Validate transition
+	if !isValidTransition(currentStatus, su.Status) {
+		errorResponse(w, http.StatusBadRequest,
+			"invalid transition: "+currentStatus+" -> "+su.Status)
+		return
+	}
+
+	// Update status
+	updateQuery := `UPDATE orders SET status = ?, updated_at = NOW() WHERE id = ?`
+	args := []interface{}{su.Status, id}
+
+	if su.Notes != "" {
+		updateQuery = `UPDATE orders SET status = ?, notes = ?, updated_at = NOW() WHERE id = ?`
+		args = []interface{}{su.Status, su.Notes, id}
+	}
+
+	_, err = db.Exec(updateQuery, args...)
 	if err != nil {
 		errorResponse(w, http.StatusInternalServerError, "failed to update order")
 		return
 	}
 
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		errorResponse(w, http.StatusNotFound, "order not found")
-		return
-	}
+	// Return updated order
+	var o Order
+	db.QueryRow(
+		`SELECT id, user_id, status, total_price,
+		        COALESCE(notes,""), created_at, updated_at
+		 FROM orders WHERE id = ?`, id,
+	).Scan(&o.ID, &o.UserID, &o.Status,
+		&o.TotalPrice, &o.Notes,
+		&o.CreatedAt, &o.UpdatedAt)
 
-	jsonResponse(w, http.StatusOK, map[string]string{
-		"message": "order status updated",
-		"status":  su.Status,
-	})
+	o.Items = getOrderItems(o.ID)
+
+	jsonResponse(w, http.StatusOK, o)
 }
 
-// DELETE /api/orders/{id} — soft cancel
+// DELETE /api/orders/{id} — cancel only
 func deleteOrderHandler(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
@@ -268,46 +335,28 @@ func deleteOrderHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := db.Exec(`
-		UPDATE orders SET status = 'CANCELLED'
-		WHERE id = ? AND status = 'PENDING'`, id,
-	)
-	if err != nil {
-		errorResponse(w, http.StatusInternalServerError, "failed to cancel order")
+	var currentStatus string
+	err = db.QueryRow(
+		`SELECT status FROM orders WHERE id = ?`, id,
+	).Scan(&currentStatus)
+
+	if err == sql.ErrNoRows {
+		errorResponse(w, http.StatusNotFound, "order not found")
 		return
 	}
 
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		errorResponse(w, http.StatusBadRequest, "order not found or cannot be cancelled")
+	if !isValidTransition(currentStatus, "CANCELLED") {
+		errorResponse(w, http.StatusBadRequest,
+			"cannot cancel order in status: "+currentStatus)
 		return
 	}
 
-	jsonResponse(w, http.StatusOK, map[string]string{"message": "order cancelled"})
-}
-
-// ── Helper: load order items ───────────────────────────────────────
-
-func getOrderItems(orderID int) []OrderItem {
-	rows, err := db.Query(`
-		SELECT id, order_id, product_id, quantity, unit_price
-		FROM order_items WHERE order_id = ?`, orderID,
+	db.Exec(
+		`UPDATE orders SET status = "CANCELLED", updated_at = NOW() WHERE id = ?`, id,
 	)
-	if err != nil {
-		return []OrderItem{}
-	}
-	defer rows.Close()
 
-	items := []OrderItem{}
-	for rows.Next() {
-		var item OrderItem
-		if err := rows.Scan(
-			&item.ID, &item.OrderID,
-			&item.ProductID, &item.Quantity, &item.UnitPrice,
-		); err != nil {
-			continue
-		}
-		items = append(items, item)
-	}
-	return items
+	jsonResponse(w, http.StatusOK, map[string]string{
+		"message": "order cancelled",
+		"status":  "CANCELLED",
+	})
 }

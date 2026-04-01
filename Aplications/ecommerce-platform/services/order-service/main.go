@@ -30,7 +30,7 @@ func main() {
 	if err = db.Ping(); err != nil {
 		log.Fatalf("DB not reachable: %v", err)
 	}
-	log.Println("✅ Connected to MySQL")
+	log.Println("Connected to MySQL")
 
 	r := mux.NewRouter()
 
@@ -38,13 +38,13 @@ func main() {
 
 	api := r.PathPrefix("/api").Subrouter()
 	api.Use(jwtMiddleware)
-	api.HandleFunc("/orders",      listOrdersHandler).Methods("GET")
-	api.HandleFunc("/orders",      createOrderHandler).Methods("POST")
-	api.HandleFunc("/orders/{id}", getOrderHandler).Methods("GET")
-	api.HandleFunc("/orders/{id}", updateOrderStatusHandler).Methods("PATCH")
-	api.HandleFunc("/orders/{id}", deleteOrderHandler).Methods("DELETE")
+	api.HandleFunc("/orders",              listOrdersHandler).Methods("GET")
+	api.HandleFunc("/orders",              createOrderHandler).Methods("POST")
+	api.HandleFunc("/orders/{id}",         getOrderHandler).Methods("GET")
+	api.HandleFunc("/orders/{id}/status",  updateOrderStatusHandler).Methods("PATCH")
+	api.HandleFunc("/orders/{id}",         deleteOrderHandler).Methods("DELETE")
 
-	log.Println("🚀 Order service running on :8083")
+	log.Println("Order service running on :8083")
 	log.Fatal(http.ListenAndServe(":8083", r))
 }
 
