@@ -31,7 +31,8 @@ services:
       USER_SERVICE_URL:    http://user-service:8081
       PRODUCT_SERVICE_URL: http://product-service:8082
       ORDER_SERVICE_URL:   http://order-service:8083
-    depends_on: [user-service, product-service, order-service]
+      CART_SERVICE_URL:    http://cart-service:8085
+    depends_on: [user-service, product-service, order-service, cart-service]
     networks: [ecommerce]
 
   user-service:
@@ -144,3 +145,18 @@ services:
 #     depends_on:
 #       mysql: { condition: service_healthy }
 #     networks: [ecommerce]
+
+  cart-service:
+    build: ./services/cart-service
+    ports: ["8085:8085"]
+    env_file: .env
+    environment:
+      DB_HOST:              mysql
+      DB_USER:              root
+      DB_PASS:              ${DB_ROOT_PASS}
+      JWT_SECRET:           ${JWT_SECRET}
+      PRODUCT_SERVICE_URL:  http://product-service:8082
+      ORDER_SERVICE_URL:    http://order-service:8083
+    depends_on:
+      mysql: { condition: service_healthy }
+    networks: [ecommerce]
