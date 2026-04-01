@@ -26,6 +26,10 @@ public class User {
     private String firstName;
     private String lastName;
 
+    @Column(nullable = false)
+    @Builder.Default
+    private String role = "customer";
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 }

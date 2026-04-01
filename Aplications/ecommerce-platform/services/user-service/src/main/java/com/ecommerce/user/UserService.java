@@ -21,6 +21,7 @@ public class UserService {
                 .passwordHash(passwordEncoder.encode(req.getPassword()))
                 .firstName(req.getFirstName())
                 .lastName(req.getLastName())
+                .role("customer")
                 .build();
         return toDTO(userRepository.save(user));
     }
@@ -39,12 +40,20 @@ public class UserService {
                 .orElseThrow(() -> new RuntimeException("User not found")));
     }
 
+    public UserDTO promoteToAdmin(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        user.setRole("admin");
+        return toDTO(userRepository.save(user));
+    }
+
     private UserDTO toDTO(User user) {
         return UserDTO.builder()
                 .id(user.getId())
                 .email(user.getEmail())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
+                .role(user.getRole())
                 .build();
     }
 }

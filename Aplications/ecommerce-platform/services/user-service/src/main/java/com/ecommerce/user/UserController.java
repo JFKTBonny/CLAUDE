@@ -41,4 +41,16 @@ public class UserController {
     public ResponseEntity<UserDTO> getUser(@PathVariable Long id) {
         return ResponseEntity.ok(userService.findById(id));
     }
+
+    // Admin only — promote user to admin
+    @PatchMapping("/{id}/promote")
+    public ResponseEntity<UserDTO> promoteToAdmin(
+            @PathVariable Long id,
+            @RequestHeader("X-User-Role") String role) {
+        if (!"admin".equals(role)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                                 .body(null);
+        }
+        return ResponseEntity.ok(userService.promoteToAdmin(id));
+    }
 }

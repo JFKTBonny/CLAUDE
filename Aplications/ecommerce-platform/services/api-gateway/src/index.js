@@ -10,6 +10,7 @@ const SERVICES = {
     user:    process.env.USER_SERVICE_URL    || 'http://user-service:8081',
     product: process.env.PRODUCT_SERVICE_URL || 'http://product-service:8082',
     order:   process.env.ORDER_SERVICE_URL   || 'http://order-service:8083',
+    cart:    process.env.CART_SERVICE_URL    || 'http://cart-service:8084',
 };
 
 app.use(rateLimit({ windowMs: 60_000, max: 100 }));
@@ -42,6 +43,8 @@ const forward = (baseUrl) => async (req, res) => {
             headers: {
                 'Content-Type':  'application/json',
                 'Authorization': req.headers['authorization'] || '',
+                'X-User-Role':   req.user ? req.user.role || 'customer' : 'guest',
+                'X-User-Id':     req.user ? String(req.user.userId) : '',
             },
             timeout:        30000,
             validateStatus: () => true,
@@ -68,6 +71,7 @@ app.use('/api/users',      authenticate, forward(SERVICES.user));
 app.use('/api/categories', authenticate, forward(SERVICES.product));
 app.use('/api/products',   authenticate, forward(SERVICES.product));
 app.use('/api/orders',     authenticate, forward(SERVICES.order));
+app.use('/api/cart',       authenticate, forward(SERVICES.cart));
 
 if (require.main === module) {
     app.listen(3000, () => {
