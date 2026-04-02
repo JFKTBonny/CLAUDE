@@ -44,7 +44,10 @@ pipeline {
                     env.BUILD_PRODUCT  = (buildAll || changed.contains('product-service')) ? 'true' : 'false'
                     env.BUILD_ORDER    = (buildAll || changed.contains('order-service'))   ? 'true' : 'false'
                     env.BUILD_CART     = (buildAll || changed.contains('cart-service'))    ? 'true' : 'false'
-                    env.BUILD_FRONTEND = (buildAll || changed.contains('frontend'))        ? 'true' : 'false'
+                    env.BUILD_FRONTEND     = (buildAll || changed.contains('frontend'))             ? 'true' : 'false'
+                    env.BUILD_PAYMENT      = (buildAll || changed.contains('payment-service'))      ? 'true' : 'false'
+                    env.BUILD_SHIPPING     = (buildAll || changed.contains('shipping-service'))     ? 'true' : 'false'
+                    env.BUILD_NOTIFICATION = (buildAll || changed.contains('notification-service')) ? 'true' : 'false'
 
                     echo """
                     ========================================
@@ -55,6 +58,9 @@ pipeline {
                        order-service:   ${env.BUILD_ORDER}
                        cart-service:    ${env.BUILD_CART}
                        frontend:        ${env.BUILD_FRONTEND}
+                       payment:         ${env.BUILD_PAYMENT}
+                       shipping:        ${env.BUILD_SHIPPING}
+                       notification:    ${env.BUILD_NOTIFICATION}
                     ----------------------------------------
                        Changed files: ${changed}
                        Full build:    ${buildAll}
@@ -133,6 +139,45 @@ pipeline {
                     }
                 }
 
+                stage('Payment Service') {
+                    when { expression { env.BUILD_PAYMENT == 'true' } }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/payment-service:/app \
+                                -w /app node:18-alpine \
+                                sh -c "npm ci && npm test -- --passWithNoTests --forceExit"
+                            echo "✅ Payment Service tests passed!"
+                        '''
+                    }
+                }
+
+                stage('Shipping Service') {
+                    when { expression { env.BUILD_SHIPPING == 'true' } }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/shipping-service:/app \
+                                -w /app node:18-alpine \
+                                sh -c "npm ci && npm test -- --passWithNoTests --forceExit"
+                            echo "✅ Shipping Service tests passed!"
+                        '''
+                    }
+                }
+
+                stage('Notification Service') {
+                    when { expression { env.BUILD_NOTIFICATION == 'true' } }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/notification-service:/app \
+                                -w /app node:18-alpine \
+                                sh -c "npm ci && npm test -- --passWithNoTests --forceExit"
+                            echo "✅ Notification Service tests passed!"
+                        '''
+                    }
+                }
+
                 stage('Frontend') {
                     when { expression { env.BUILD_FRONTEND == 'true' } }
                     steps {
@@ -202,6 +247,75 @@ pipeline {
                     }
                 }
 
+                stage('Payment Service') {
+                    when { expression { env.BUILD_PAYMENT == 'true' } }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/payment-service:/app \
+                                -w /app node:18-alpine \
+                                sh -c "npm ci && npm test -- --passWithNoTests --forceExit"
+                            echo "✅ Payment Service tests passed!"
+                        '''
+                    }
+                }
+
+                stage('Shipping Service') {
+                    when { expression { env.BUILD_SHIPPING == 'true' } }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/shipping-service:/app \
+                                -w /app node:18-alpine \
+                                sh -c "npm ci && npm test -- --passWithNoTests --forceExit"
+                            echo "✅ Shipping Service tests passed!"
+                        '''
+                    }
+                }
+
+                stage('Notification Service') {
+                    when { expression { env.BUILD_NOTIFICATION == 'true' } }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v /home/bonny/CLAUDE/Aplications/ecommerce-platform/services/notification-service:/app \
+                                -w /app node:18-alpine \
+                                sh -c "npm ci && npm test -- --passWithNoTests --forceExit"
+                            echo "✅ Notification Service tests passed!"
+                        '''
+                    }
+                }
+
+                stage('Payment') {
+                    when { expression { env.BUILD_PAYMENT == 'true' } }
+                    steps {
+                        script {
+                            buildAndPush('payment-service',
+                                "${WORKSPACE}/Aplications/ecommerce-platform/services/payment-service")
+                        }
+                    }
+                }
+
+                stage('Shipping') {
+                    when { expression { env.BUILD_SHIPPING == 'true' } }
+                    steps {
+                        script {
+                            buildAndPush('shipping-service',
+                                "${WORKSPACE}/Aplications/ecommerce-platform/services/shipping-service")
+                        }
+                    }
+                }
+
+                stage('Notification') {
+                    when { expression { env.BUILD_NOTIFICATION == 'true' } }
+                    steps {
+                        script {
+                            buildAndPush('notification-service',
+                                "${WORKSPACE}/Aplications/ecommerce-platform/services/notification-service")
+                        }
+                    }
+                }
+
                 stage('Frontend') {
                     when { expression { env.BUILD_FRONTEND == 'true' } }
                     steps {
@@ -235,6 +349,9 @@ pipeline {
                         docker pull santonix/order-service:latest
                         docker pull santonix/cart-service:latest
                         docker pull santonix/frontend:latest
+                        docker pull santonix/payment-service:latest
+                        docker pull santonix/shipping-service:latest
+                        docker pull santonix/notification-service:latest
 
                         echo "🚀 Starting platform..."
                         cd /home/bonny/CLAUDE/Aplications/ecommerce-platform
@@ -362,11 +479,32 @@ pipeline {
                             echo "  ✅ Frontend OK (200)" && PASS=$((PASS+1)) || \
                             { echo "  ❌ Frontend failed: HTTP $CODE"; FAIL=$((FAIL+1)); }
 
+                        # Test 10: Payment service
+                        echo "🧪 Test 10: Payment service..."
+                        CODE=$(curl -s -o /dev/null -w "%{http_code}" http://payment-service:8086/health)
+                        [ "$CODE" = "200" ] && \
+                            echo "  ✅ Payment OK (200)" && PASS=$((PASS+1)) || \
+                            { echo "  ❌ Payment failed: HTTP $CODE"; FAIL=$((FAIL+1)); }
+
+                        # Test 11: Shipping service
+                        echo "🧪 Test 11: Shipping service..."
+                        CODE=$(curl -s -o /dev/null -w "%{http_code}" http://shipping-service:8087/health)
+                        [ "$CODE" = "200" ] && \
+                            echo "  ✅ Shipping OK (200)" && PASS=$((PASS+1)) || \
+                            { echo "  ❌ Shipping failed: HTTP $CODE"; FAIL=$((FAIL+1)); }
+
+                        # Test 12: Notification service
+                        echo "🧪 Test 12: Notification service..."
+                        CODE=$(curl -s -o /dev/null -w "%{http_code}" http://notification-service:8088/health)
+                        [ "$CODE" = "200" ] && \
+                            echo "  ✅ Notification OK (200)" && PASS=$((PASS+1)) || \
+                            { echo "  ❌ Notification failed: HTTP $CODE"; FAIL=$((FAIL+1)); }
+
                         echo ""
                         echo "========================================"
                         echo "  Smoke Test Results — Build #$BUILD_NUMBER"
-                        echo "  ✅ Passed: $PASS / 9"
-                        echo "  ❌ Failed: $FAIL / 9"
+                        echo "  ✅ Passed: $PASS / 12"
+                        echo "  ❌ Failed: $FAIL / 12"
                         echo "========================================"
 
                         [ $FAIL -eq 0 ] && echo "🎉 All smoke tests passed!" || exit 1
