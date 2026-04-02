@@ -80,3 +80,42 @@ CREATE TABLE IF NOT EXISTS cart_items (
     updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY unique_cart_item (user_id, product_id)
 );
+
+-- ── Payments ───────────────────────────────────────────────────────
+USE orders_db;
+CREATE TABLE IF NOT EXISTS payments (
+    id             INT AUTO_INCREMENT PRIMARY KEY,
+    order_id       INT NOT NULL,
+    transaction_id VARCHAR(100) UNIQUE NOT NULL,
+    amount         DECIMAL(10,2) NOT NULL,
+    method         ENUM('CREDIT_CARD','DEBIT_CARD','PAYPAL','BANK_TRANSFER') DEFAULT 'CREDIT_CARD',
+    status         ENUM('COMPLETED','FAILED','PENDING','REFUNDED') DEFAULT 'PENDING',
+    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ── Shipments ──────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS shipments (
+    id                INT AUTO_INCREMENT PRIMARY KEY,
+    order_id          INT NOT NULL,
+    tracking_number   VARCHAR(50) UNIQUE NOT NULL,
+    carrier           VARCHAR(50),
+    status            ENUM('PROCESSING','PICKED_UP','IN_TRANSIT','OUT_FOR_DELIVERY','DELIVERED') DEFAULT 'PROCESSING',
+    address           VARCHAR(255),
+    city              VARCHAR(100),
+    country           VARCHAR(100),
+    postal_code       VARCHAR(20),
+    estimated_delivery DATE,
+    created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- ── Notifications ──────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS notifications (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    type       VARCHAR(50) NOT NULL,
+    recipient  VARCHAR(255) NOT NULL,
+    subject    VARCHAR(255),
+    message    TEXT NOT NULL,
+    status     ENUM('SENT','FAILED','PENDING') DEFAULT 'PENDING',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

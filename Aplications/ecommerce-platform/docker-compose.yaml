@@ -160,3 +160,61 @@ services:
     depends_on:
       mysql: { condition: service_healthy }
     networks: [ecommerce]
+
+  frontend:
+    build: ./frontend
+    ports: ["80:80"]
+    depends_on: [api-gateway]
+    networks: [ecommerce]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 30s
+      retries: 3
+
+  payment-service:
+    build: ./services/payment-service
+    ports: ["8086:8086"]
+    environment:
+      DB_HOST:    mysql
+      DB_USER:    root
+      DB_PASS:    ${DB_ROOT_PASS}
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      mysql: { condition: service_healthy }
+    networks: [ecommerce]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8086/health"]
+      interval: 30s
+      retries: 3
+
+  shipping-service:
+    build: ./services/shipping-service
+    ports: ["8087:8087"]
+    environment:
+      DB_HOST:    mysql
+      DB_USER:    root
+      DB_PASS:    ${DB_ROOT_PASS}
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      mysql: { condition: service_healthy }
+    networks: [ecommerce]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8087/health"]
+      interval: 30s
+      retries: 3
+
+  notification-service:
+    build: ./services/notification-service
+    ports: ["8088:8088"]
+    environment:
+      DB_HOST:    mysql
+      DB_USER:    root
+      DB_PASS:    ${DB_ROOT_PASS}
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      mysql: { condition: service_healthy }
+    networks: [ecommerce]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8088/health"]
+      interval: 30s
+      retries: 3

@@ -7,10 +7,13 @@ const app        = express();
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
 
 const SERVICES = {
-    user:    process.env.USER_SERVICE_URL    || 'http://user-service:8081',
-    product: process.env.PRODUCT_SERVICE_URL || 'http://product-service:8082',
-    order:   process.env.ORDER_SERVICE_URL   || 'http://order-service:8083',
-    cart:    process.env.CART_SERVICE_URL    || 'http://cart-service:8084',
+    user:         process.env.USER_SERVICE_URL         || 'http://user-service:8081',
+    product:      process.env.PRODUCT_SERVICE_URL      || 'http://product-service:8082',
+    order:        process.env.ORDER_SERVICE_URL        || 'http://order-service:8083',
+    cart:         process.env.CART_SERVICE_URL         || 'http://cart-service:8085',
+    payment:      process.env.PAYMENT_SERVICE_URL      || 'http://payment-service:8086',
+    shipping:     process.env.SHIPPING_SERVICE_URL     || 'http://shipping-service:8087',
+    notification: process.env.NOTIFICATION_SERVICE_URL || 'http://notification-service:8088',
 };
 
 app.use(rateLimit({ windowMs: 60_000, max: 100 }));
@@ -71,7 +74,10 @@ app.use('/api/users',      authenticate, forward(SERVICES.user));
 app.use('/api/categories', authenticate, forward(SERVICES.product));
 app.use('/api/products',   authenticate, forward(SERVICES.product));
 app.use('/api/orders',     authenticate, forward(SERVICES.order));
-app.use('/api/cart',       authenticate, forward(SERVICES.cart));
+app.use('/api/cart',         authenticate, forward(SERVICES.cart));
+app.use('/api/payments',     authenticate, forward(SERVICES.payment));
+app.use('/api/shipping',     authenticate, forward(SERVICES.shipping));
+app.use('/api/notifications',authenticate, forward(SERVICES.notification));
 
 if (require.main === module) {
     app.listen(3000, () => {
